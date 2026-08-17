@@ -1,0 +1,456 @@
+openapi: 3.1.0
+info:
+  title: Personal Notes RAG API
+  version: 1.0.0
+  description: >-
+    Same-origin JSON contract for authenticated personal notes, semantic retrieval,
+    and locally generated RAG responses. A user identity is always derived from the
+    server-side session and is never accepted from request payloads.
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+tags:
+  - name: Authentication
+  - name: Notes
+  - name: Search
+  - name: Chat
+paths:
+  /auth/register:
+    post:
+      tags: [Authentication]
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created; does not implicitly authenticate.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '409': { $ref: '#/components/responses/UsernameConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /auth/login:
+    post:
+      tags: [Authentication]
+      operationId: loginUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '204':
+          description: Authenticated; session and CSRF cookies are rotated.
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string, const: no-store }
+        '401': { $ref: '#/components/responses/AuthenticationFailed' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      operationId: logoutUser
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Session revoked and cookies expired; repeated logout is safe.
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfRejected' }
+  /auth/me:
+    get:
+      tags: [Authentication]
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: Current authenticated user.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /notes:
+    get:
+      tags: [Notes]
+      operationId: listNotes
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 256 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Notes owned by the current user, newest updated first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotePage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      tags: [Notes]
+      operationId: createNote
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NoteCreate' }
+      responses:
+        '201':
+          description: Note persisted and semantic preparation queued.
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Note' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfRejected' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /notes/{noteId}:
+    parameters:
+      - $ref: '#/components/parameters/NoteId'
+    get:
+      tags: [Notes]
+      operationId: getNote
+      responses:
+        '200':
+          description: Current user's note.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Note' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NoteNotFound' }
+    patch:
+      tags: [Notes]
+      operationId: updateNote
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+        - $ref: '#/components/parameters/IfMatchVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NoteUpdate' }
+      responses:
+        '200':
+          description: Note updated and semantic preparation re-queued.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Note' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfRejected' }
+        '404': { $ref: '#/components/responses/NoteNotFound' }
+        '409': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Notes]
+      operationId: deleteNote
+      description: >-
+        Permanently deletes the note and semantic representations. The UI must obtain
+        explicit user confirmation before sending this request.
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204': { description: Note permanently deleted. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfRejected' }
+        '404': { $ref: '#/components/responses/NoteNotFound' }
+  /notes/{noteId}/retry-indexing:
+    post:
+      tags: [Notes]
+      operationId: retryNoteIndexing
+      parameters:
+        - $ref: '#/components/parameters/NoteId'
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '202':
+          description: Failed semantic preparation returned to pending.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Note' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfRejected' }
+        '404': { $ref: '#/components/responses/NoteNotFound' }
+        '409':
+          description: Note is not in a retryable state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  /search/semantic:
+    post:
+      tags: [Search]
+      operationId: semanticSearch
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SemanticSearchRequest' }
+      responses:
+        '200':
+          description: Relevant ready notes belonging only to the current user.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SemanticSearchResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfRejected' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/ModelUnavailable' }
+  /chat/messages:
+    post:
+      tags: [Chat]
+      operationId: sendChatMessage
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChatRequest' }
+      responses:
+        '200':
+          description: >-
+            Grounded answer, clarification, or confirmation of a note created for the
+            current user. Sources are empty when context is insufficient.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/CsrfRejected' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/ModelUnavailable' }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-notes_session
+      description: Opaque server-side session token. Local HTTP development uses a non-__Host name.
+  parameters:
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: { type: string, minLength: 32, maxLength: 256 }
+    NoteId:
+      name: noteId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IfMatchVersion:
+      name: If-Match
+      in: header
+      required: true
+      description: Current numeric note version, preventing lost updates.
+      schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
+  schemas:
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 3, maxLength: 64 }
+        password: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 64 }
+        password: { type: string, minLength: 1, maxLength: 128, writeOnly: true }
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, username, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        created_at: { type: string, format: date-time }
+    SemanticStatus:
+      type: string
+      enum: [pending, processing, ready, failed]
+    NoteCreate:
+      type: object
+      additionalProperties: false
+      required: [title, content]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        content: { type: string, minLength: 1, maxLength: 100000 }
+    NoteUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        content: { type: string, minLength: 1, maxLength: 100000 }
+    NoteSummary:
+      type: object
+      additionalProperties: false
+      required: [id, title, version, semantic_status, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        version: { type: integer, minimum: 1 }
+        semantic_status: { $ref: '#/components/schemas/SemanticStatus' }
+        semantic_error_code: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Note:
+      type: object
+      additionalProperties: false
+      required: [id, title, content, version, semantic_status, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        content: { type: string }
+        version: { type: integer, minimum: 1 }
+        semantic_status: { $ref: '#/components/schemas/SemanticStatus' }
+        semantic_error_code: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    NotePage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/NoteSummary' }
+        next_cursor: { type: [string, 'null'] }
+    SemanticSearchRequest:
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query: { type: string, minLength: 1, maxLength: 2000 }
+        limit: { type: integer, minimum: 1, maximum: 10, default: 5 }
+    Source:
+      type: object
+      additionalProperties: false
+      required: [note_id, title, excerpt]
+      properties:
+        note_id: { type: string, format: uuid }
+        title: { type: string }
+        excerpt: { type: string, maxLength: 500 }
+    SemanticSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [results]
+      properties:
+        results:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/Source' }
+    ChatRequest:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message: { type: string, minLength: 1, maxLength: 4000 }
+    ChatResponse:
+      type: object
+      additionalProperties: false
+      required: [intent, answer, needs_clarification, sources]
+      properties:
+        intent:
+          type: string
+          enum: [answer, create_note]
+        answer: { type: string }
+        needs_clarification: { type: boolean }
+        sources:
+          type: array
+          items: { $ref: '#/components/schemas/Source' }
+        created_note:
+          oneOf:
+            - $ref: '#/components/schemas/Note'
+            - type: 'null'
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, message]
+      properties:
+        field: { type: string }
+        message: { type: string }
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        request_id: { type: string, format: uuid }
+        field_errors:
+          type: array
+          items: { $ref: '#/components/schemas/FieldError' }
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: { $ref: '#/components/schemas/ErrorDetail' }
+  responses:
+    Unauthenticated:
+      description: Missing, expired, invalid, or revoked session.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    AuthenticationFailed:
+      description: Generic failure; does not identify which credential was wrong.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    UsernameConflict:
+      description: Canonical username already exists.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    NoteNotFound:
+      description: Same response for absent and other-user notes.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    VersionConflict:
+      description: Note changed since the client loaded it.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    ValidationError:
+      description: Request shape or field validation failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    CsrfRejected:
+      description: Origin or anti-CSRF validation failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    RateLimited:
+      description: Too many authentication attempts; retry later.
+      headers:
+        Retry-After:
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    ModelUnavailable:
+      description: Local embedding or language model is unavailable; persisted notes remain safe.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
