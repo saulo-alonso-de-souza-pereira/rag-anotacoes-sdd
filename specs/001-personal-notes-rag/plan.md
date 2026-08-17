@@ -31,8 +31,8 @@ aceleração GPU opcional
 **Project Type**: Aplicação web monolítica modular com API JSON, frontend estático e worker assíncrono
 
 **Performance Goals**: CRUD e listagem p95 abaixo de 500 ms em carga local de referência; busca
-semântica p95 abaixo de 2 s; 95% das notas prontas para recuperação em até 30 s; resposta do chatbot
-iniciada ou concluída em até 60 s no perfil CPU documentado
+semântica p95 abaixo de 2 s; 95% das notas prontas para recuperação em até 30 s; pelo menos 90% das
+respostas completas do chatbot apresentadas em até 60 s no perfil CPU documentado
 
 **Constraints**: Fluxo principal sem API externa de LLM; corpus somente de anotações; isolamento por
 usuário em aplicação e banco; exclusão permanente; fontes verificadas pelo backend; inicialização em
@@ -52,7 +52,7 @@ ambiente limpo em até 15 minutos após modelos e imagens estarem disponíveis
 | Testabilidade | Contrato OpenAPI, camadas substituíveis, testes unitários, integração, segurança, E2E e eval RAG | PASS | PASS |
 | Rastreabilidade | Decisões e alternativas registradas em `research.md`; contratos ligados a FRs | PASS | PASS |
 | Qualidade e manutenibilidade | Módulos por responsabilidade, erros uniformes, dependências mínimas e lockfile | PASS | PASS |
-| Separação entre requisitos e implementação | A specification permaneceu tecnológica; escolhas estão neste plano | PASS | PASS |
+| Separação entre requisitos e implementação | A specification permaneceu tecnologicamente agnóstica; escolhas estão neste plano | PASS | PASS |
 | Governança | Nenhuma violação; gates repetidos após modelo, contratos e quickstart | PASS | PASS |
 
 ### Gate pós-design

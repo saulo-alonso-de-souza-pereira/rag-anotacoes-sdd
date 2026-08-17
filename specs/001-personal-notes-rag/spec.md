@@ -283,8 +283,8 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
 - **SC-003**: Todas as cinco operações de gerenciamento preservam o estado esperado após reinicialização
   em 100% dos cenários de persistência definidos.
 - **SC-004**: Em um conjunto de consultas semanticamente equivalentes sem palavras-chave idênticas,
-  pelo menos 85% apresentam entre os primeiros resultados uma anotação própria julgada relevante pelo
-  conjunto de teste.
+  pelo menos 85% apresentam, entre os cinco primeiros resultados, uma anotação própria julgada
+  relevante pelo conjunto de teste.
 - **SC-005**: Pelo menos 90% das perguntas respondíveis no conjunto de aceitação recebem resposta
   compatível com o conteúdo das anotações fornecidas, sem afirmações contraditórias às fontes.
 - **SC-006**: Em 100% das respostas que utilizam contexto recuperado, todas as anotações efetivamente
@@ -294,9 +294,11 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
 - **SC-008**: Pelo menos 95% das solicitações claras de criação via chatbot geram exatamente uma
   anotação com o conteúdo pretendido e uma confirmação compreensível; solicitações ambíguas não geram
   anotação sem esclarecimento.
-- **SC-009**: Em ambiente limpo compatível, um responsável consegue iniciar o fluxo principal seguindo
-  apenas as instruções fornecidas em até 15 minutos, e obtém o mesmo conjunto de capacidades em três
-  execuções consecutivas.
+- **SC-009**: Em ambiente limpo compatível, com os pré-requisitos, imagens e modelos documentados já
+  disponíveis, um responsável consegue iniciar o fluxo principal seguindo apenas as instruções
+  fornecidas em até 15 minutos e obtém o mesmo conjunto de capacidades em três execuções consecutivas.
+  O tempo necessário para downloads iniciais deve ser registrado separadamente e não integra essa
+  medição.
 - **SC-010**: O conjunto completo de aceitação do fluxo principal funciona com APIs externas de modelo
   de linguagem indisponíveis, usando geração executada localmente.
 - **SC-011**: Em pelo menos 95% das criações e atualizações do conjunto de aceitação, a versão atual da
