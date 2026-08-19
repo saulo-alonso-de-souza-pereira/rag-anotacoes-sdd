@@ -1,0 +1,88 @@
+name: personal-notes-rag
+
+x-app: &app
+  image: personal-notes-rag:local
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file: .env
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+    ollama:
+      condition: service_healthy
+
+services:
+  db:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_DB: notes
+      POSTGRES_USER: notes_migrator
+      POSTGRES_PASSWORD: ${NOTES_MIGRATOR_PASSWORD:?set NOTES_MIGRATOR_PASSWORD}
+      NOTES_RUNTIME_PASSWORD: ${NOTES_RUNTIME_PASSWORD:?set NOTES_RUNTIME_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/10-runtime-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notes_migrator -d notes"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:0.30.6
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+
+  model-init:
+    image: ollama/ollama:0.30.6
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      NOTES_GENERATION_MODEL_ID: ${NOTES_GENERATION_MODEL_ID:-365c0bd3c000}
+      NOTES_EMBEDDING_MODEL_DIGEST: ${NOTES_EMBEDDING_MODEL_DIGEST:?set embedding digest}
+    volumes:
+      - ollama-models:/root/.ollama
+      - ./scripts/model-init.sh:/model-init.sh:ro
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/model-init.sh"]
+    restart: "no"
+
+  web:
+    <<: *app
+    ports:
+      - "${NOTES_HOST_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      model-init:
+        condition: service_completed_successfully
+
+  index-worker:
+    <<: *app
+    command: ["python", "-m", "notes_rag.worker"]
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      model-init:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-data:
+  ollama-models:

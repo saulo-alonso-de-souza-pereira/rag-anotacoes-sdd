@@ -1,0 +1,32 @@
+{
+  "notes": [
+    {"id": "viagem-recife", "title": "Férias em Pernambuco", "content": "Visitar Recife Antigo, Olinda e as praias de Porto de Galinhas."},
+    {"id": "receita-bolo", "title": "Bolo de laranja", "content": "Misturar farinha, ovos, suco de laranja e assar por quarenta minutos."},
+    {"id": "saude-corrida", "title": "Treino semanal", "content": "Correr cinco quilômetros nas terças e quintas pela manhã."},
+    {"id": "livro-bras", "title": "Leitura de Machado", "content": "Terminar Memórias Póstumas de Brás Cubas neste mês."},
+    {"id": "financas-reserva", "title": "Planejamento financeiro", "content": "Guardar parte do salário para formar uma reserva de emergência."},
+    {"id": "casa-encanador", "title": "Manutenção da cozinha", "content": "Chamar um encanador para consertar o vazamento embaixo da pia."},
+    {"id": "trabalho-api", "title": "Projeto backend", "content": "Criar endpoints FastAPI e migrações PostgreSQL para o serviço."},
+    {"id": "idioma-espanhol", "title": "Estudos de idioma", "content": "Praticar conversação em espanhol vinte minutos por dia."},
+    {"id": "pet-veterinario", "title": "Cuidados com a gata", "content": "Levar a gata Luna ao veterinário para a vacina anual."},
+    {"id": "musica-violao", "title": "Aulas de música", "content": "Treinar acordes e ritmos brasileiros no violão aos sábados."}
+  ],
+  "queries": [
+    {"query": "lugares históricos para conhecer no nordeste", "relevant": ["viagem-recife"]},
+    {"query": "como preparar uma sobremesa cítrica", "relevant": ["receita-bolo"]},
+    {"query": "atividade aeróbica duas vezes por semana", "relevant": ["saude-corrida"]},
+    {"query": "qual romance clássico brasileiro preciso concluir", "relevant": ["livro-bras"]},
+    {"query": "dinheiro separado para imprevistos", "relevant": ["financas-reserva"]},
+    {"query": "profissional para resolver água escapando no armário", "relevant": ["casa-encanador"]},
+    {"query": "tarefas do servidor web em Python", "relevant": ["trabalho-api"]},
+    {"query": "melhorar a fala em uma língua estrangeira", "relevant": ["idioma-espanhol"]},
+    {"query": "imunização periódica do meu animal", "relevant": ["pet-veterinario"]},
+    {"query": "praticar instrumento de cordas no fim de semana", "relevant": ["musica-violao"]},
+    {"query": "roteiro com Olinda e litoral pernambucano", "relevant": ["viagem-recife"]},
+    {"query": "criar uma proteção contra despesas inesperadas", "relevant": ["financas-reserva"]}
+  ],
+  "unrelated_queries": [
+    "resultados da exploração mineral em Marte",
+    "manutenção de turbinas de um submarino nuclear"
+  ]
+}

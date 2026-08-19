@@ -1,0 +1,27 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; line-height: 1.5; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #f6f7fb; color: #18202b; }
+header { display: flex; gap: 2rem; align-items: center; justify-content: space-between; padding: 1rem 5vw; background: #172554; color: white; }
+nav, .actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+main { width: min(960px, 92vw); margin: 2rem auto; }
+section { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 6px 24px #17255418; }
+form { display: grid; gap: 1rem; max-width: 680px; }
+label { display: grid; gap: .35rem; font-weight: 650; }
+input, textarea, button { font: inherit; padding: .7rem .85rem; border: 1px solid #94a3b8; border-radius: 7px; }
+textarea { min-height: 12rem; resize: vertical; }
+button { cursor: pointer; background: #1d4ed8; color: white; border-color: #1d4ed8; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
+.danger { background: #b91c1c; border-color: #b91c1c; }
+.note-list { list-style: none; padding: 0; display: grid; gap: .65rem; }
+.note-list li { display: grid; grid-template-columns: 1fr auto auto; gap: .75rem; align-items: center; padding: .6rem 0; }
+.note-title { text-align: left; background: transparent; color: #1e3a8a; border: 0; }
+.semantic { font-size: .8rem; padding: .2rem .5rem; border-radius: 1rem; background: #e2e8f0; }
+.semantic.ready { background: #dcfce7; color: #166534; }
+.semantic.failed { background: #fee2e2; color: #991b1b; }
+#status { min-height: 1.5rem; margin-block: 1rem; font-weight: 600; }
+.skip-link { position: absolute; left: -9999px; }
+.skip-link:focus { left: 1rem; top: 1rem; z-index: 10; background: white; padding: .7rem; }
+[hidden] { display: none !important; }
+@media (max-width: 640px) { header { align-items: flex-start; flex-direction: column; } .note-list li { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }
+

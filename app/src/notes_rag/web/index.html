@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Anotações pessoais com busca semântica e RAG local">
+    <title>Anotações pessoais</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+    <header>
+      <h1>Anotações pessoais</h1>
+      <nav aria-label="Navegação principal">
+        <button type="button" data-view="notes">Anotações</button>
+        <button type="button" data-view="search">Busca</button>
+        <button type="button" data-view="chat">Chat</button>
+        <button type="button" id="logout">Sair</button>
+      </nav>
+    </header>
+    <main id="conteudo" tabindex="-1">
+      <section id="auth-view" aria-labelledby="auth-title">
+        <h2 id="auth-title">Acessar</h2>
+        <div id="auth-content"></div>
+      </section>
+      <section id="notes-view" aria-labelledby="notes-title" hidden>
+        <h2 id="notes-title">Minhas anotações</h2>
+        <div id="notes-content"></div>
+      </section>
+      <section id="search-view" aria-labelledby="search-title" hidden>
+        <h2 id="search-title">Busca semântica</h2>
+        <div id="search-content"></div>
+      </section>
+      <section id="chat-view" aria-labelledby="chat-title" hidden>
+        <h2 id="chat-title">Chat com minhas anotações</h2>
+        <div id="chat-content" aria-live="polite"></div>
+      </section>
+      <div id="status" role="status" aria-live="polite"></div>
+    </main>
+  </body>
+</html>
