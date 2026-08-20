@@ -397,25 +397,25 @@ multiple intents return `clarification` without answer or write; the browser ren
 
 ### Tests for User Story 6 (write and observe failure before implementation)
 
-- [ ] T098 [P] [US6] Extend chat contract tests for `rag|general_chat|create_note|clarification`, conditional empty sources, insufficiency without fallback, and preserved response fields in `app/tests/contract/test_chat_contract.py`
-- [ ] T099 [P] [US6] Extend intent unit tests for explicit note references, clear general questions, semantically related-note independence, real ambiguity, multiple intents, and unchanged `create_note` compatibility in `app/tests/unit/test_intent.py`
-- [ ] T100 [P] [US6] Extend orchestration unit tests for routing before retrieval, direct general generation, RAG insufficiency without general fallback, source validation, and no partial execution on clarification in `app/tests/unit/test_rag.py`
-- [ ] T101 [P] [US6] Add integration tests exercising message → real routing service → selected branch → response with deterministic Ollama/retrieval fakes, including a stored Docker note that must not reclassify `O que é Docker?`, in `app/tests/integration/test_chat_modes_flow.py`
-- [ ] T102 [P] [US6] Extend security tests proving RAG remains owner-filtered while `general_chat` performs no note retrieval and exposes no note sources or cross-user content in `app/tests/security/test_rag_isolation.py`
-- [ ] T103 [P] [US6] Add browser E2E tests for “Resposta geral”, “Baseada nas suas anotações”, source visibility only for grounded RAG, insufficiency, ambiguity, and multiple-intent non-execution in `app/tests/e2e/test_general_chat_journey.py`
-- [ ] T104 [P] [US6] Create deterministic Portuguese conversation-mode cases covering clear general, explicit RAG, related-note independence, insufficient RAG, ambiguity, and multiple intents in `app/tests/rag_eval/fixtures/conversation_mode_cases.json`
-- [ ] T105 [US6] Add SC-012 and four-result routing evaluation assertions using the T104 cases and the fixed `llama3:latest` baseline in `app/tests/rag_eval/test_conversation_modes_quality.py`
-- [ ] T118 [P] [US6] Update legacy `intent=answer` expectations to `rag` or `general_chat` as behaviorally appropriate in `app/tests/contract/test_chat_creation_contract.py`, `app/tests/e2e/test_chat_creation_journey.py`, `app/tests/rag_eval/fixtures/intent_cases.json`, and `app/tests/rag_eval/test_intent_quality.py`, preserving all existing `create_note`, exact-once and SC-008 assertions without attempting to fix the separate creation inconsistency
-- [ ] T119 [P] [US6] Extend the documented CPU performance scenarios to measure both `rag` and `general_chat` complete responses against the unchanged threshold of at least 90% within 60 seconds in `app/tests/performance/test_local_targets.py`
+- [X] T098 [P] [US6] Extend chat contract tests for `rag|general_chat|create_note|clarification`, conditional empty sources, insufficiency without fallback, and preserved response fields in `app/tests/contract/test_chat_contract.py`
+- [X] T099 [P] [US6] Extend intent unit tests for explicit note references, clear general questions, semantically related-note independence, real ambiguity, multiple intents, and unchanged `create_note` compatibility in `app/tests/unit/test_intent.py`
+- [X] T100 [P] [US6] Extend orchestration unit tests for routing before retrieval, direct general generation, RAG insufficiency without general fallback, source validation, and no partial execution on clarification in `app/tests/unit/test_rag.py`
+- [X] T101 [P] [US6] Add integration tests exercising message → real routing service → selected branch → response with deterministic Ollama/retrieval fakes, including a stored Docker note that must not reclassify `O que é Docker?`, in `app/tests/integration/test_chat_modes_flow.py`
+- [X] T102 [P] [US6] Extend security tests proving RAG remains owner-filtered while `general_chat` performs no note retrieval and exposes no note sources or cross-user content in `app/tests/security/test_rag_isolation.py`
+- [X] T103 [P] [US6] Add browser E2E tests for “Resposta geral”, “Baseada nas suas anotações”, source visibility only for grounded RAG, insufficiency, ambiguity, and multiple-intent non-execution in `app/tests/e2e/test_general_chat_journey.py`
+- [X] T104 [P] [US6] Create deterministic Portuguese conversation-mode cases covering clear general, explicit RAG, related-note independence, insufficient RAG, ambiguity, and multiple intents in `app/tests/rag_eval/fixtures/conversation_mode_cases.json`
+- [X] T105 [US6] Add SC-012 and four-result routing evaluation assertions using the T104 cases and the fixed `llama3:latest` baseline in `app/tests/rag_eval/test_conversation_modes_quality.py`
+- [X] T118 [P] [US6] Update legacy `intent=answer` expectations to `rag` or `general_chat` as behaviorally appropriate in `app/tests/contract/test_chat_creation_contract.py`, `app/tests/e2e/test_chat_creation_journey.py`, `app/tests/rag_eval/fixtures/intent_cases.json`, and `app/tests/rag_eval/test_intent_quality.py`, preserving all existing `create_note`, exact-once and SC-008 assertions without attempting to fix the separate creation inconsistency
+- [X] T119 [P] [US6] Extend the documented CPU performance scenarios to measure both `rag` and `general_chat` complete responses against the unchanged threshold of at least 90% within 60 seconds in `app/tests/performance/test_local_targets.py`
 
 ### Implementation for User Story 6
 
-- [ ] T106 [US6] Replace the legacy `answer` decision with validated `rag|general_chat|create_note|clarification` domain and response types while preserving creation fields and `needs_clarification` compatibility in `app/src/notes_rag/domain/chat.py`
-- [ ] T107 [US6] Extend the structured completion schema and fail-closed parser to classify the four routing results before retrieval, preserving the existing single-model, single-repair and `create_note` behavior in `app/src/notes_rag/services/intent.py`
-- [ ] T108 [US6] Refactor chat orchestration so `rag` alone retrieves authorized notes, insufficient RAG never falls back, `general_chat` uses the same `llama3:latest` without note context/sources, and `clarification` has no substantive answer or write in `app/src/notes_rag/services/rag.py`
-- [ ] T109 [US6] Update `/api/v1/chat/messages` serialization and safe response mapping for the four intents without changing authentication, CSRF or non-streaming behavior in `app/src/notes_rag/api/chat.py`
-- [ ] T110 [US6] Render `general_chat` as “Resposta geral”, grounded `rag` as “Baseada nas suas anotações”, sources only when returned for RAG, and clarification without partial UI actions in `app/src/notes_rag/web/app.js`
-- [ ] T111 [P] [US6] Add accessible visual styling for the two response-mode indicators without changing the existing frontend architecture in `app/src/notes_rag/web/styles.css`
+- [X] T106 [US6] Replace the legacy `answer` decision with validated `rag|general_chat|create_note|clarification` domain and response types while preserving creation fields and `needs_clarification` compatibility in `app/src/notes_rag/domain/chat.py`
+- [X] T107 [US6] Extend the structured completion schema and fail-closed parser to classify the four routing results before retrieval, preserving the existing single-model, single-repair and `create_note` behavior in `app/src/notes_rag/services/intent.py`
+- [X] T108 [US6] Refactor chat orchestration so `rag` alone retrieves authorized notes, insufficient RAG never falls back, `general_chat` uses the same `llama3:latest` without note context/sources, and `clarification` has no substantive answer or write in `app/src/notes_rag/services/rag.py`
+- [X] T109 [US6] Update `/api/v1/chat/messages` serialization and safe response mapping for the four intents without changing authentication, CSRF or non-streaming behavior in `app/src/notes_rag/api/chat.py`
+- [X] T110 [US6] Render `general_chat` as “Resposta geral”, grounded `rag` as “Baseada nas suas anotações”, sources only when returned for RAG, and clarification without partial UI actions in `app/src/notes_rag/web/app.js`
+- [X] T111 [P] [US6] Add accessible visual styling for the two response-mode indicators without changing the existing frontend architecture in `app/src/notes_rag/web/styles.css`
 
 **Checkpoint**: US6 is independently demonstrable through backend integration and browser E2E tests;
 the original RAG and note-creation stories remain regression-compatible.
@@ -427,12 +427,12 @@ the original RAG and note-creation stories remain regression-compatible.
 **Purpose**: Validate the restored capability against SC-012 and the revised design without changing
 SC-008 or treating the separate creation inconsistency as revision scope.
 
-- [ ] T112 Run `docker compose run --rm web pytest tests/unit/test_intent.py tests/unit/test_rag.py tests/contract/test_chat_contract.py tests/contract/test_chat_creation_contract.py tests/integration/test_chat_modes_flow.py tests/security/test_rag_isolation.py tests/rag_eval/test_intent_quality.py tests/rag_eval/test_conversation_modes_quality.py tests/performance/test_local_targets.py` and record the exact command/results in `specs/001-personal-notes-rag/validation-report.md`
-- [ ] T113 Run `docker compose run --rm web pytest tests/e2e/test_general_chat_journey.py tests/e2e/test_chat_creation_journey.py` against the real backend routing path, not a browser-only API stub, and record indicator/source/non-execution and legacy-compatibility evidence in `specs/001-personal-notes-rag/validation-report.md`
-- [ ] T114 Execute the revised Quickstart sections 5.5 and 5.6 for scenarios A–H with `llama3:latest` resolving to `365c0bd3c000`, and record actual SC-012 results without adjusting failures in `specs/001-personal-notes-rag/validation-report.md`
-- [ ] T115 Run the complete existing regression suite via `scripts/check.ps1`, including original RAG, isolation and creation tests, treating any creation inconsistency as a separate result rather than fixing it in this iteration
-- [ ] T116 Update second-iteration traceability from US6/FR-011/FR-013/FR-014/FR-015/FR-022/FR-023/SC-012 to T098–T115 and T118–T119 and their evidence in `specs/001-personal-notes-rag/validation-report.md`
-- [ ] T117 Re-run the Constitution Check for the second iteration and record PASS evidence or explicit blocking violations in `specs/001-personal-notes-rag/validation-report.md`
+- [X] T112 Run `docker compose run --rm web pytest tests/unit/test_intent.py tests/unit/test_rag.py tests/contract/test_chat_contract.py tests/contract/test_chat_creation_contract.py tests/integration/test_chat_modes_flow.py tests/security/test_rag_isolation.py tests/rag_eval/test_intent_quality.py tests/rag_eval/test_conversation_modes_quality.py tests/performance/test_local_targets.py` and record the exact command/results in `specs/001-personal-notes-rag/validation-report.md`
+- [X] T113 Run `docker compose run --rm web pytest tests/e2e/test_general_chat_journey.py tests/e2e/test_chat_creation_journey.py` against the real backend routing path, not a browser-only API stub, and record indicator/source/non-execution and legacy-compatibility evidence in `specs/001-personal-notes-rag/validation-report.md`
+- [X] T114 Execute the revised Quickstart sections 5.5 and 5.6 for scenarios A–H with `llama3:latest` resolving to `365c0bd3c000`, and record actual SC-012 results without adjusting failures in `specs/001-personal-notes-rag/validation-report.md`
+- [X] T115 Run the complete existing regression suite via `scripts/check.ps1`, including original RAG, isolation and creation tests, treating any creation inconsistency as a separate result rather than fixing it in this iteration
+- [X] T116 Update second-iteration traceability from US6/FR-011/FR-013/FR-014/FR-015/FR-022/FR-023/SC-012 to T098–T115 and T118–T119 and their evidence in `specs/001-personal-notes-rag/validation-report.md`
+- [X] T117 Re-run the Constitution Check for the second iteration and record PASS evidence or explicit blocking violations in `specs/001-personal-notes-rag/validation-report.md`
 
 ## Second-Iteration Dependencies & Execution Order
 

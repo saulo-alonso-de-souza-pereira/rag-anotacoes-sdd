@@ -160,3 +160,107 @@ PASS and SC-007 recorded as FAIL. The failed success criterion is preserved rath
 The final all-flags invocation of `scripts/check.ps1` completed successfully in 620.5 s. Its
 real-model performance suite passed in 138.93 s, its three-run Compose suite in 349.02 s, and its
 offline suite in 89.29 s.
+
+## Post-implementation revision: general conversation (2026-08-20)
+
+This section records only the second iteration (T098–T119), which restored the general-conversation
+capability omitted from the experiment's base specification. It does not rewrite the first
+implementation history, change SC-008, or treat the separately observed creation inconsistency as
+part of this correction.
+
+### Routing, contract and implementation evidence
+
+- The response contract and domain accept exactly `rag|general_chat|create_note|clarification`.
+- High-confidence intent is decided from the message before retrieval. Explicit references to the
+  user's notes route to `rag`; clear definitional questions route to `general_chat`; explicit
+  RAG/general ambiguity and explicit multiple-intent connectors route to `clarification`.
+- Only `rag` invokes owner-scoped retrieval. An insufficient RAG query returns `intent=rag`, the
+  documented insufficiency answer and `sources=[]`; it never falls back to general knowledge.
+- `general_chat` invokes the existing `llama3:latest` through the same Ollama adapter, with no note
+  context, no sources, no second generative model and no external LLM API. General output is bounded
+  to keep complete CPU responses within the existing latency target.
+- The UI renders `Resposta geral` for `general_chat` and `Baseada nas suas anotações` only for
+  grounded RAG with verified sources.
+
+The prescribed T112 Docker command was executed first against the pre-implementation image and
+correctly observed the red state. After rebuilding, its initial unmounted form could not collect the
+contract tests because `/specs` is intentionally outside the runtime image. The reproducible
+directed run therefore mounted `specs` read-only and disabled only the global full-suite coverage
+gate:
+
+```text
+docker compose run --rm -v <workspace>/specs:/specs:ro web pytest --no-cov \
+  tests/unit/test_intent.py tests/unit/test_rag.py \
+  tests/contract/test_chat_contract.py tests/contract/test_chat_creation_contract.py \
+  tests/integration/test_chat_modes_flow.py tests/security/test_rag_isolation.py \
+  tests/rag_eval/test_intent_quality.py tests/rag_eval/test_conversation_modes_quality.py \
+  tests/performance/test_local_targets.py -q
+```
+
+Result at the implementation checkpoint: **27 passed, 1 live-model test deselected**. Subsequent
+directed runs after real-model findings included 30 routing/orchestration tests and then 29
+intent/RAG/Ollama/integration tests; both sets passed.
+
+### Browser, backend and Quickstart acceptance
+
+- Deterministic Chromium journeys: **2 passed** in 1.82 s, covering both indicators, source
+  visibility, insufficiency, clarification/non-execution and legacy creation compatibility.
+- Real UI → real API → real router → real branch journey: **1 passed, 1 deselected** in 39.77 s.
+  The browser observed `Resposta geral` without sources, then a grounded response labeled `Baseada
+  nas suas anotações` with a source.
+- Quickstart 5.5/5.6 A–H and SC-012 against the real backend: **1 passed** in 137.86 s. The acceptance
+  set contained three clear general questions; **3/3 (100%)** returned `general_chat` with
+  `sources=[]`, including `O que é Docker?` while a ready Docker note existed. Explicit RAG remained
+  RAG, unsupported RAG returned insufficiency without fallback, and ambiguity/multiple intents
+  returned clarification without creating a note.
+- Model identity inspected in the running Ollama service: `llama3:latest` resolved to
+  `365c0bd3c000`; `embeddinggemma:300m` remained `85462619ee72`.
+
+The first real-model acceptance attempts are retained as diagnostic evidence rather than hidden:
+one explicit RAG query initially became `clarification`; one multiple-intent message initially became
+`create_note`; and an unbounded general response reached the 60-second Ollama timeout and returned
+503. The final implementation addressed only these second-iteration routing and general-response
+paths. No creation-quality tuning or SC-008 change was made.
+
+### Performance and regression
+
+CPU profile remained the documented AMD Ryzen 5 4600G, 6 cores/12 logical processors and 16.5 GB
+RAM. The live performance test covered 10 RAG and 10 general-chat complete responses with the fixed
+local model. Final result: **PASS**, 1 test passed in **489.30 s**; each branch satisfied the unchanged
+assertion that at least 9 of 10 complete responses finish within 60 seconds. CRUD p95 remained below
+500 ms and semantic-search p95 below 2 s in the same run.
+
+The official default gate was then executed through `scripts/check.ps1` with the isolated Python
+3.13 environment:
+
+- frozen dependency sync: PASS;
+- Ruff format and lint: PASS (96 files formatted consistently, no lint findings);
+- Alembic: one head, `003`;
+- non-E2E regression: **117 passed, 1 skipped, 9 deselected**, branch-aware coverage **85.90%**;
+- default Chromium gate: **3 passed, 2 environment-gated tests skipped, 122 deselected**.
+
+The skip and deselections are the existing marker-controlled live/Compose/offline gates; the live
+general-conversation and performance gates were run separately above and passed.
+
+### Second-iteration traceability
+
+| Requirement / outcome | Tasks | Evidence | Result |
+| --- | --- | --- | --- |
+| US6, FR-022 | T098–T101, T104–T109, T118 | Contract, intent, orchestration and real backend acceptance | PASS |
+| FR-011, FR-013 | T100–T102, T108 | Retrieval only in owner-scoped RAG; related note does not select mode | PASS |
+| FR-014 | T098, T100–T101, T108, T114 | Unsupported explicit RAG remains insufficient with no general fallback | PASS |
+| FR-015 | T098, T100, T103, T109–T110 | Verified RAG sources and grounded UI indicator | PASS |
+| FR-023 | T098, T100–T103, T108–T110 | General responses use `sources=[]` and general UI indicator | PASS |
+| SC-012 | T104–T105, T112–T114 | 3/3 clear live general questions answered without note-source attribution | PASS |
+| Existing CPU latency target | T119, T112, T115 | 10 RAG + 10 general responses; at least 9/10 within 60 s per branch | PASS |
+| SC-008 regression boundary | T099, T115, T118 | Historical creation assertions preserved; no creation-quality correction | PRESERVED |
+
+### Constitution Check — second iteration
+
+**PASS; no blocking violation.** Simplicity is preserved by reusing the monolith, endpoint, Ollama
+adapter and sole generative model. Security/privacy remain enforced because only the RAG branch can
+retrieve owner-scoped notes and general chat receives no note context. Testability is demonstrated by
+red-before-green tests, real backend/browser acceptance and coverage above 85%. Rastreability links
+US6 and the revised FR/SC set to T098–T119 and the evidence above. Quality is supported by the clean
+Ruff/Alembic/regression gates. Requirements, planning and implementation remain separated, and no
+Constitution amendment or exception was required.
