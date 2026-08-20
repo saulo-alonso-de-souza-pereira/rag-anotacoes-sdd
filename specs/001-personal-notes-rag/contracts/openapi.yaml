@@ -3,8 +3,9 @@ info:
   title: Personal Notes RAG API
   version: 1.0.0
   description: >-
-    Same-origin JSON contract for authenticated personal notes, semantic retrieval,
-    and locally generated RAG responses. A user identity is always derived from the
+    Same-origin JSON contract for authenticated personal notes and locally generated
+    chat responses. Semantic retrieval is internal to the validated rag branch and has
+    no dedicated public endpoint. A user identity is always derived from the
     server-side session and is never accepted from request payloads.
 servers:
   - url: /api/v1
@@ -13,7 +14,6 @@ security:
 tags:
   - name: Authentication
   - name: Notes
-  - name: Search
   - name: Chat
 paths:
   /auth/register:
@@ -192,27 +192,6 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
-  /search/semantic:
-    post:
-      tags: [Search]
-      operationId: semanticSearch
-      parameters:
-        - $ref: '#/components/parameters/CsrfToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/SemanticSearchRequest' }
-      responses:
-        '200':
-          description: Relevant ready notes belonging only to the current user.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/SemanticSearchResponse' }
-        '401': { $ref: '#/components/responses/Unauthenticated' }
-        '403': { $ref: '#/components/responses/CsrfRejected' }
-        '422': { $ref: '#/components/responses/ValidationError' }
-        '503': { $ref: '#/components/responses/ModelUnavailable' }
   /chat/messages:
     post:
       tags: [Chat]
@@ -227,15 +206,17 @@ paths:
       responses:
         '200':
           description: >-
-            RAG answer, general answer, clarification, or confirmation of a note created
-            for the current user. RAG never falls back to general knowledge when context
-            is insufficient. General answers and clarifications have empty sources.
+            Every message is first classified by llama3:latest and structurally validated.
+            A valid result yields a RAG answer, general answer, clarification, or confirmation
+            of a note created for the current user. RAG never falls back to general knowledge
+            when context is insufficient. General answers and clarifications have empty sources.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ChatResponse' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/CsrfRejected' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '502': { $ref: '#/components/responses/ClassificationFailed' }
         '503': { $ref: '#/components/responses/ModelUnavailable' }
 components:
   securitySchemes:
@@ -335,13 +316,6 @@ components:
           type: array
           items: { $ref: '#/components/schemas/NoteSummary' }
         next_cursor: { type: [string, 'null'] }
-    SemanticSearchRequest:
-      type: object
-      additionalProperties: false
-      required: [query]
-      properties:
-        query: { type: string, minLength: 1, maxLength: 2000 }
-        limit: { type: integer, minimum: 1, maximum: 10, default: 5 }
     Source:
       type: object
       additionalProperties: false
@@ -350,15 +324,6 @@ components:
         note_id: { type: string, format: uuid }
         title: { type: string }
         excerpt: { type: string, maxLength: 500 }
-    SemanticSearchResponse:
-      type: object
-      additionalProperties: false
-      required: [results]
-      properties:
-        results:
-          type: array
-          maxItems: 10
-          items: { $ref: '#/components/schemas/Source' }
     ChatRequest:
       type: object
       additionalProperties: false
@@ -373,8 +338,10 @@ components:
         intent:
           type: string
           description: >-
-            Validated routing result. The UI renders general_chat as "Resposta geral"
-            and a grounded rag response as "Baseada nas suas anotações".
+            llama3:latest primary classification result after structural validation.
+            The UI renders general_chat as "Resposta geral" and a grounded rag response
+            as "Baseada nas suas anotações". Classification failures use an error response,
+            never clarification.
           enum: [rag, general_chat, create_note, clarification]
         answer: { type: string }
         needs_clarification:
@@ -460,6 +427,13 @@ components:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     ModelUnavailable:
       description: Local embedding or language model is unavailable; persisted notes remain safe.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    ClassificationFailed:
+      description: >-
+        Primary llama3:latest classification failed technically or returned an invalid schema
+        or intent. The request fails closed without retrieval, answer generation or note creation.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }

@@ -117,10 +117,15 @@ modelo/formatação é usado na indexação e consulta. Troca de modelo exige re
 
 ## Decision 7: Recuperação exata e limiar calibrável
 
-**Decision**: Busca cosseno exata pré-filtrada por usuário, top-5 e limiar inicial configurável de
+**Decision original**: Busca cosseno exata pré-filtrada por usuário, top-5 e limiar inicial configurável de
 similaridade 0,55. Calibrar o limiar com conjunto fixo em português; medir Recall@5, contexto indevido e
 perguntas sem evidência. No modo RAG, se nenhum chunk passar, não chamar geração fundamentada e retornar
 fontes vazias com indicação de insuficiência. Essa ausência não decide se uma mensagem é conversa geral.
+
+**Superseding scope decision (2026-08-20)**: O mesmo algoritmo, embeddings, indexação, armazenamento
+vetorial, isolamento, relevância, seleção de contexto, grounding e fontes permanecem, mas exclusivamente
+como retrieval interno após uma classificação `rag` validada. A busca semântica deixa de ser
+funcionalidade independente: não há tela, menu, fluxo de usuário ou endpoint público exclusivo.
 
 **Rationale**: Scores não têm interpretação universal. Configuração versionada permite ajuste sem
 codificar uma suposição como regra de domínio. Busca exata maximiza recall no envelope inicial.
@@ -187,7 +192,7 @@ inventadas e mantém rastreabilidade. Conteúdo de notas é dado não confiável
 - Responder com conhecimento geral dentro de uma consulta às notas: viola o grounding desse modo.
 - Framework RAG: rejeitado inicialmente; poucas funções explícitas são mais auditáveis e testáveis.
 
-## Decision 10: Criação por intenção estruturada
+## Decision 10: Classificação estruturada e criação por intenção
 
 **Decision original**: Solicitar ao `llama3:latest`, como completion e sem tools, JSON com
 `intent=answer|create_note`, `title` e `content`, usando a restrição de formato do runtime Ollama. O
@@ -200,12 +205,23 @@ ou intenção mista produzem pergunta de esclarecimento sem escrita.
 `create_note` permanecem inalterados. `clarification` cobre ambiguidade real e múltiplas intenções e não
 autoriza resposta substantiva nem escrita.
 
+**Superseding decision (2026-08-20)**: Toda mensagem conversacional passa primariamente por
+`llama3:latest` antes de roteamento, retrieval ou ação. A classificação retorna uma das quatro intenções
+e o backend valida o schema e a intenção. A decisão anterior que permitia interpretar comandos por
+heurísticas pré-LLM fica superseded: regex, palavras-chave, prefixos e estrutura linguística não decidem
+intenção e só podem participar de normalização, validação, segurança ou fail-closed. Uma intenção válida
+`clarification` solicita esclarecimento sem ação. A parte da decisão original que tratava nova saída
+inválida como esclarecimento também fica superseded: falha técnica, schema inválido ou intenção inválida
+retorna erro acionável e fail-closed, sem retrieval, resposta ou criação. O comportamento experimental
+existente de `create_note`, inclusive SC-008 e sua inconsistência observada, não é corrigido nesta revisão.
+
 **Rationale**: Separa interpretação probabilística da autorização determinística sem depender de tool
 calling não declarado pelo modelo. O modelo nunca recebe capacidade de SQL nem escolhe `user_id`.
 
 **Alternatives considered**:
 
-- Regex/comandos rígidos: previsível, mas não atende linguagem natural ampla.
+- Regex, palavras-chave, prefixos ou estrutura da pergunta como roteador: superseded/rejeitados porque
+  substituem a classificação semântica primária e falham em linguagem natural ampla.
 - Agente/tool calling: não é capacidade declarada de `llama3:latest` e ampliaria a superfície de risco.
 
 **Sources**: [Ollama structured outputs](https://docs.ollama.com/capabilities/structured-outputs),
@@ -265,7 +281,7 @@ Compose documenta dependências e permite reproduzir o fluxo principal.
 [Compose volumes](https://docs.docker.com/reference/compose-file/volumes/),
 [Ollama Docker](https://docs.ollama.com/docker)
 
-## Decision 14: Roteamento conversacional de três modos (revisão pós-implementação)
+## Decision 14: Classificação primária e roteamento conversacional (revisão pós-implementação)
 
 **Historical decision**: A primeira implementação SDD tratava toda mensagem não classificada como
 `create_note` como `answer`, executava retrieval e recusava quando o corpus era insuficiente. Essa
@@ -279,10 +295,20 @@ faz fallback geral; `general_chat` chama diretamente o mesmo `llama3:latest` sem
 existente. O contrato expõe o discriminador no campo `intent`, e a UI deriva dele “Resposta geral” ou
 “Baseada nas suas anotações”.
 
+**Superseding decision (2026-08-20)**: `llama3:latest` é explicitamente o classificador primário de
+toda mensagem e também o único gerador dos ramos `rag` e `general_chat`. O fluxo obrigatório é mensagem
+→ classificação pelo LLM → validação estruturada → execução de exatamente um ramo. `general_chat` chama
+o mesmo modelo sem retrieval nem fontes. `rag` executa retrieval interno autorizado e responde somente
+com esse contexto; insuficiência nunca faz fallback geral. `create_note` preserva o comportamento
+existente. `clarification` válida pede esclarecimento sem ação, enquanto falha técnica ou decisão
+estruturalmente ou semanticamente inválida produz erro acionável e fail-closed. Qualquer decisão anterior
+de intenção diretamente por regex, palavras-chave, prefixos ou estrutura linguística fica superseded.
+
 **Rationale**: A ausência de resultados é evidência sobre suficiência do corpus, não sobre a intenção
 da mensagem. Usá-la como roteador confundiria “O que é Docker?” com “O que eu anotei sobre Docker?” e
 permitiria fallback silencioso indevido. Decidir o modo antes da busca mantém as fronteiras testáveis e
-preserva o grounding de consultas pessoais.
+preserva o grounding de consultas pessoais. A classificação primária pelo LLM também evita que exemplos
+linguísticos se convertam em regras determinísticas acidentais.
 
 **Alternatives considered**:
 
@@ -295,8 +321,11 @@ preserva o grounding de consultas pessoais.
   alterar a variável experimental; o mesmo `llama3:latest` e a validação backend são suficientes.
 - Criar endpoint separado para conversa geral: rejeitado porque o endpoint atual já representa a
   interface conversacional e um discriminador explícito é a menor mudança contratual.
+- Manter endpoint, tela ou menu de busca semântica independente: superseded em 2026-08-20; retrieval é
+  uma etapa interna do ramo `rag`, não uma capacidade autônoma oferecida ao usuário.
 
-**Scope note**: Esta decisão supersedes somente o roteamento globalmente RAG restritivo. Recuperação,
-RLS, validação de fontes, criação de notas, SC-008, modelo generativo, API não-streaming e topologia de
-implantação permanecem preservados. A inconsistência manual de criação continua sendo ocorrência
-experimental separada.
+**Scope note**: Esta decisão supersedes o roteamento globalmente RAG restritivo, heurísticas pré-LLM de
+intenção e a exposição da busca semântica independente. Retrieval interno, embeddings, indexação,
+pgvector, RLS, relevância, seleção de contexto, grounding, validação de fontes, criação de notas, SC-008,
+modelo único, API não-streaming e topologia de implantação permanecem preservados. A inconsistência
+manual de criação continua sendo ocorrência experimental separada.

@@ -467,3 +467,103 @@ T110 UI behavior          | T111 indicator styling
    through T112–T117.
 5. Do not close the iteration while relevant revised acceptance criteria fail; do not use this phase
    to repair or reclassify the separate conversational-creation experiment.
+
+---
+
+# Third Iteration: Primary LLM Classification and Internal-Only Retrieval (2026-08-20)
+
+**History boundary**: T001–T119 above remain completed, retain their original IDs and wording, and
+continue to document the implementation history. T120 onward are compensating post-implementation tasks
+for the revised Specification, Clarification and Plan. In particular, T041/T052 remain historical even
+though this iteration removes the public semantic-search capability they originally introduced.
+
+**Revision scope**: US3, US6, FR-009, FR-010, FR-013, FR-014, FR-019, FR-022, FR-023, SC-004 and
+SC-012. Existing `create_note` behavior and every SC-008 assertion remain unchanged; the known
+conversational-creation inconsistency is explicitly outside this iteration.
+
+## Phase 11: Revised Classification and Chat Branches (US3 and US6)
+
+**Goal**: Make `llama3:latest` the primary classifier for every conversational message, validate its
+structured result before any action, and preserve the four independently testable branches.
+
+**Independent Test**: With an instrumented deterministic Ollama fake, prove exactly one classification
+call precedes every route; general questions with different linguistic structures use the same path;
+invalid classifications fail closed as errors; `general_chat` performs a second same-model generation
+without retrieval; `rag` retrieves internally and never falls back; `clarification` performs no action.
+
+### Tests for Revised Classification and Chat Branches (write and observe failure before implementation)
+
+- [ ] T120 [P] [US6] Replace heuristic-oriented intent unit cases with spy-based assertions that every `rag|general_chat|create_note|clarification` message invokes `llama3:latest` first and that regex, keyword, prefix and question-shape matches cannot bypass or override the returned intent in `app/tests/unit/test_intent.py`
+- [ ] T121 [P] [US6] Add integration assertions for message → primary LLM classification → structured validation → selected branch ordering, proving retrieval, general generation and note creation are untouched before validation succeeds, in `app/tests/integration/test_chat_modes_flow.py`
+- [ ] T122 [P] [US6] Extend chat contract tests so technical classifier failure, invalid JSON/schema and disallowed intent return the actionable fail-closed error envelope rather than `intent=clarification`, while a valid `clarification` response remains compatible, in `app/tests/contract/test_chat_contract.py`
+- [ ] T123 [P] [US3] Extend orchestration unit tests proving `general_chat` uses classification then a second call to the same `llama3:latest` without retrieval/sources, `rag` uses classification then authorized retrieval and grounded generation without general fallback, and valid `clarification` executes no action in `app/tests/unit/test_rag.py`
+- [ ] T124 [P] Add OpenAPI contract assertions that `/api/v1/search/semantic`, the `Search` tag and public semantic-search schemas are absent while `/api/v1/chat/messages` exposes the classification-failure response in `app/tests/contract/test_openapi_document.py`
+- [ ] T125 [P] Add static UI contract assertions that no Busca menu, semantic-search view/form or `/search/semantic` request remains while notes and chat navigation stay intact in `app/tests/contract/test_static_ui.py`
+- [ ] T126 [P] [US3] Extend security regression tests proving internal RAG retrieval still filters by owner before relevance ordering and that general, clarification and classification-error paths expose no note context or sources in `app/tests/security/test_rag_isolation.py`
+- [ ] T127 [P] [US6] Add controlled-dataset E2E cases requiring “O que é Docker?”, “Qual é a capital do Peru?”, “Onde fica Machu Picchu?” and “Por que o céu é azul?” each to produce `intent=general_chat`, proving every case traverses the same primary `llama3:latest` classifier and no regex, keyword, prefix or question-shape bypass decides the intent, without public search UI, in `app/tests/e2e/test_general_chat_journey.py`
+- [ ] T128 [P] [US6] Extend the deterministic conversation dataset and quality assertions with the four required general formulations plus explicit RAG counterparts, heuristic-bypass sentinels and valid clarification cases in `app/tests/rag_eval/fixtures/conversation_mode_cases.json` and `app/tests/rag_eval/test_conversation_modes_quality.py`
+- [ ] T129 [P] [US6] Replace the public semantic-search performance scenario so no measurement calls `/search/semantic`; measure retrieval internally within the validated `rag` branch at p95 < 2 s and measure two fixed sets of 10 complete responses (`rag` and `general_chat`), requiring at least 9/10 in each branch to complete within 60 s from receipt of the message by the conversational flow until the backend produces the complete response, using the project's documented local CPU profile and fixed local-model baseline, in `app/tests/performance/test_local_targets.py`
+- [ ] T143 Execute the pre-implementation tests defined in T120–T129, record in `specs/001-personal-notes-rag/validation-report.md` which failures are expected because the revised behavior is not yet implemented, distinguish them from unrelated failures, and block the start of T130 if any unexpected failure remains, thereby preserving objective RED-state evidence (depends on T120–T129)
+
+### Implementation for Revised Classification and Chat Branches
+
+- [ ] T130 [US6] Refactor `IntentService.classify` so every non-empty conversational message calls `llama3:latest` before routing, removing direct intent decisions from regex, keywords, prefixes, question structure and explicit-creation extraction while retaining deterministic normalization only in `app/src/notes_rag/services/intent.py` (depends on T143)
+- [ ] T131 [US6] Separate valid `clarification` decisions from classifier technical/schema/intent failures after the preserved same-model repair attempt, raising a safe actionable fail-closed classification error without returning a clarification decision in `app/src/notes_rag/services/intent.py` and `app/src/notes_rag/domain/chat.py` (depends on T130)
+- [ ] T132 [US3] Remove the implicit default-`rag` bypass and enforce validated classification before orchestration; keep `general_chat` on the same LLM with no retrieval/sources, `rag` on internal authorized retrieval plus grounded generation without fallback, and `clarification` action-free in `app/src/notes_rag/services/rag.py` (depends on T123, T130–T131)
+- [ ] T133 [US6] Map classifier technical/schema/intent failures to the standardized actionable error response for `/api/v1/chat/messages` without serializing them as `ChatResponse` or changing authentication, CSRF and non-streaming behavior in `app/src/notes_rag/api/chat.py` and `app/src/notes_rag/api/errors.py` (depends on T122, T131–T132)
+- [ ] T134 Remove the public semantic-search router registration and dedicated endpoint module while preserving notes retry-indexing and the internal retrieval service in `app/src/notes_rag/main.py` and `app/src/notes_rag/api/search.py` (depends on T124, T143)
+- [ ] T135 [P] Remove the Busca navigation, semantic-search view/form/results and `/search/semantic` client call without changing the static frontend architecture or chat/source presentation in `app/src/notes_rag/web/index.html`, `app/src/notes_rag/web/app.js` and `app/src/notes_rag/web/styles.css` (depends on T125, T134)
+- [ ] T136 [P] Remove obsolete public-search contract coverage from `app/tests/contract/test_search_contract.py`, preserving retry-indexing coverage under `app/tests/contract/test_notes_contract.py` and the new endpoint-absence assertions from T124 (depends on T124, T134)
+- [ ] T137 [US3] Preserve the existing note-indexing architecture so note creation/update continues to trigger asynchronous indexing independently of chatbot messages and embeddings, pgvector persistence and index refresh remain in the note-indexing lifecycle; require only retrieval, authorized-context selection, grounding and source publication to follow a validated `rag` classification, with no RAG retrieval for `general_chat`, `create_note` or `clarification`, in `app/src/notes_rag/services/retrieval.py`, `app/src/notes_rag/services/indexing.py` and `app/src/notes_rag/services/rag.py` (depends on T126, T132, T134)
+
+**Checkpoint**: The chat path is independently testable with mandatory LLM-first classification; public
+search is absent; internal RAG retrieval and the existing creation branch remain regression-compatible.
+
+---
+
+## Phase 12: Third-Iteration Regression, Performance and Traceability
+
+**Purpose**: Prove the revised FR/SC coverage without changing SC-008 or correcting the known creation
+issue.
+
+- [ ] T138 Re-run the targeted T120–T129 unit, contract, integration, security, E2E, evaluation and performance suites after T130–T137, recording exact commands and post-implementation results in `specs/001-personal-notes-rag/validation-report.md` and comparing them with the RED-state evidence already recorded by T143 (depends on T130–T137)
+- [ ] T139 Execute Quickstart sections 5.3–5.7 against the real backend path with `llama3:latest` resolving to `365c0bd3c000`, recording primary-classifier ordering, branch isolation, public-search absence and error-versus-clarification evidence in `specs/001-personal-notes-rag/validation-report.md` (depends on T138)
+- [ ] T142 [US5] Update Compose E2E coverage to remove every `/search/semantic` dependency; after creating or updating a note intended for RAG consultation, wait for and prove that the corresponding note version was indexed using an existing internal mechanism, either the preparation/indexing state already exposed by the existing contract or controlled direct inspection of the database/worker, without adding a public search endpoint or a test-only endpoint; then consult the note through `/api/v1/chat/messages`, validate the `rag` behavior, and preserve all other existing Compose checks in `app/tests/e2e/test_compose_quickstart.py` (depends on T134, T137–T139)
+- [ ] T140 Run the complete regression suite via `scripts/check.ps1`, covering RAG, general chat, create-note compatibility, clarification, isolation, sources, performance and local/offline execution; record the known creation inconsistency separately without fixing it in `specs/001-personal-notes-rag/validation-report.md` (depends on T138–T139, T142)
+- [ ] T141 Update third-iteration traceability for US3/US6, FR-009/010/013/014/019/022/023 and SC-004/012 to T120–T143, confirm all pre-existing SC-008 assertions remain unchanged, and record the final Constitution Check or blocking violations in `specs/001-personal-notes-rag/validation-report.md` (depends on T138–T140, T142)
+
+## Third-Iteration Dependencies & Execution Order
+
+1. T120–T129 are written first and may run in parallel because they target independent test files; T143
+   then executes them, records the expected RED state and blocks implementation if any unrelated failure remains.
+2. Only after T143 records the expected RED state and confirms there are no unrelated failures may the
+   two implementation entry points begin: T130 depends explicitly on T143, and T134 depends on T124 and T143.
+   Then T130 → T131 establishes mandatory classification and error semantics.
+3. T132 depends on T123 and T130–T131; T133 depends on T122 and T131–T132.
+4. T134 depends on T124 and T143. T135 depends on T125 and T134. T136 depends on T124 and T134.
+5. T137 depends on T126, T132 and T134, and is the gate proving removal of public search did not remove
+   internal retrieval. T127–T129 remain acceptance/regression inputs for final validation.
+6. T138 starts only after T130–T137. Then execute T138 → T139 → T142 → T140 → T141; T142 also depends on T134 and T137 and must complete before the final regression in T140.
+
+### Third-Iteration Parallel Example
+
+```text
+T120 intent bypass tests   | T121 ordering integration | T122 error contract
+T123 branch unit tests     | T124 OpenAPI absence       | T125 static UI absence
+T126 isolation regression | T127 four-form E2E         | T128 eval dataset | T129 performance
+
+After T143 records the expected RED state and confirms there are no unrelated failures:
+T130 → T131 → T132 → T133 | T134 → T135/T136
+T137 follows T132 and T134; T142 follows T134/T137/T139 and precedes T140
+```
+
+## Third-Iteration Delivery Strategy
+
+1. Freeze T001–T119 as completed historical baseline.
+2. Add T120–T129, then execute T143 to record the required RED-state evidence and gate implementation.
+3. Only after T143 passes its gate may T130 and T134 begin; implement T130–T137 in dependency order
+   without redesigning the existing architecture.
+4. Validate targeted behavior, Quickstart, Compose E2E, full regression, performance and offline execution
+   through T138–T139, T142 and T140.
+5. Close traceability and Constitution Check with T141; do not modify SC-008 or repair the separate
+   conversational-creation inconsistency in this iteration.

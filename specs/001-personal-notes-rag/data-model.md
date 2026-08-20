@@ -84,7 +84,8 @@ Represents one permanently owned personal annotation.
   outstanding job for the previous version in the same transaction.
 - Delete physically removes note, chunks and jobs in one transaction. Foreign keys use cascade only
   within this ownership aggregate.
-- A note is semantically searchable only when `semantic_status=ready` and its chunks match `version`.
+- A note is eligible for internal RAG retrieval only when `semantic_status=ready` and its chunks match
+  `version`.
 
 **State transitions**:
 
@@ -150,7 +151,10 @@ Durable transactional request to prepare one note version.
 
 ## Transient Concepts (Not Persisted)
 
-### SemanticQuery
+### InternalRagQuery
+
+Transient query created only after a validated `rag` classification; it has no independent public API
+or user-facing search flow.
 
 | Field | Rules |
 |-------|-------|
@@ -174,9 +178,12 @@ Backend-validated result parsed from a `llama3:latest` completion requested in J
 - `content`: required only for an executable create intent
 - `clarification`: present when title/content or intent is ambiguous, or when multiple intents coexist
 
-The decision cannot contain or select `user_id`. The backend applies a strict schema; after at most one
-repair attempt with the same model, invalid or ambiguous structures fail closed and request
-clarification without persistence or substantive answer. Intent is validated before retrieval:
+Every conversational message is classified first by `llama3:latest`; no regex, keyword, prefix or
+question shape can supply or override `intent`. The decision cannot contain or select `user_id`. The
+backend applies a strict schema before routing. A valid `clarification` requests clarification without
+persistence or substantive answer. A technical failure or result with invalid schema or intent returns
+an actionable error and fails closed without retrieval, response generation or creation. Intent is
+validated before retrieval:
 `general_chat` never becomes `rag` because a similar note exists, while `rag` without sufficient
 context never falls back to `general_chat`. No native tool-calling capability is assumed.
 
@@ -187,7 +194,9 @@ Contains `intent`, user-facing answer, authorized sources and optional created n
 renders “Resposta geral”. For a grounded `rag` response, sources are backend-validated and the UI
 renders “Baseada nas suas anotações”; an insufficient `rag` response keeps `intent=rag`, uses empty
 sources and does not fall back. `clarification` has no sources or created note. Conversation history is
-not persisted in v1. The browser may display current-page messages until refresh.
+not persisted in v1. The browser may display current-page messages until refresh. Classification
+failures use the standard error envelope rather than `ChatResponse` and are never represented as
+`intent=clarification`.
 
 ## Row-Level Security Design
 

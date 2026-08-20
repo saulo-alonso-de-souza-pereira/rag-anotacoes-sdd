@@ -7,7 +7,8 @@
 **Status**: Draft
 
 **Input**: User description: "Aplicação de gerenciamento de anotações pessoais com autenticação,
-isolamento entre usuários, recuperação semântica e interação por chatbot com RAG local."
+isolamento entre usuários e interação por chatbot com RAG local, no qual a recuperação semântica é um
+mecanismo interno das consultas às anotações."
 
 ## Revision History
 
@@ -16,6 +17,11 @@ isolamento entre usuários, recuperação semântica e interação por chatbot c
   conversa geral já existente na aplicação de referência não havia sido registrada na
   Especificação-Base. Esta revisão restaura essa equivalência nos artefatos experimentais; não introduz
   uma melhoria funcional nova e não reclassifica resultados da primeira implementação.
+- **2026-08-20 — Revisão controlada pós-implementação**: A validação funcional posterior identificou a
+  necessidade de explicitar o modelo de linguagem local como classificador primário de toda mensagem e
+  de retirar a busca semântica do conjunto de funcionalidades independentes do usuário, preservando-a
+  exclusivamente como mecanismo interno do RAG. O registro histórico anterior é mantido, e esta revisão
+  substitui somente as regras de roteamento e de exposição da recuperação semântica afetadas.
 
 ## Clarifications
 
@@ -28,7 +34,7 @@ isolamento entre usuários, recuperação semântica e interação por chatbot c
 - Q: O que deverá acontecer quando o usuário confirmar a exclusão de uma anotação? → A: Excluir
   permanentemente após confirmação.
 - Q: Quando uma anotação for criada ou atualizada, em quanto tempo ela deverá ficar disponível para
-  busca semântica e respostas do chatbot? → A: Em até 30 segundos, indicando preparação.
+  recuperação semântica interna e respostas do chatbot? → A: Em até 30 segundos, indicando preparação.
 - Q: Qual credencial o usuário deverá fornecer junto ao nome de usuário para se autenticar? → A: Senha
   definida pelo usuário.
 
@@ -37,13 +43,22 @@ isolamento entre usuários, recuperação semântica e interação por chatbot c
 - Q: Qual regra funcional deve determinar se uma mensagem clara é consulta às anotações ou conversa
   geral? → A: A intenção expressa na própria mensagem determina o modo: referências ao que o usuário
   anotou, registrou ou possui em suas notas indicam RAG; perguntas independentes das notas indicam
-  conversa geral; a existência de notas semanticamente semelhantes não altera essa intenção.
+  conversa geral; a existência de notas semanticamente semelhantes não altera essa intenção. **Registro
+  histórico substituído em 2026-08-20 pela exigência de classificação semântica primária pelo modelo de
+  linguagem local; os exemplos linguísticos não constituem regras determinísticas de roteamento.**
 - Q: Como a interface deve distinguir visualmente uma resposta geral de uma resposta fundamentada nas
   anotações? → A: Exibir indicadores explícitos nos dois modos, “Resposta geral” e “Baseada nas suas
   anotações”, mantendo fontes somente no modo RAG.
 - Q: O que o chatbot deve fazer quando uma única mensagem combina claramente duas ou mais intenções,
   como conversa geral, consulta às anotações e criação? → A: Solicitar que o usuário escolha uma única
   intenção; antes do esclarecimento, não responder à pergunta nem criar anotação.
+
+### Session 2026-08-20
+
+- Q: Quando a classificação não puder produzir uma intenção válida, o chatbot deve solicitar
+  esclarecimento ou apresentar um erro sem executar nenhuma ação? → A: A intenção válida
+  `clarification` solicita esclarecimento; falha técnica, saída inválida ou fora do schema apresenta
+  erro acionável sem executar ação.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -87,51 +102,23 @@ um consiga acessar dados do outro.
 
 ---
 
-### User Story 2 - Recuperar anotações por significado (Priority: P2)
-
-Como usuário autenticado, quero procurar minhas anotações por relevância semântica para encontrar
-conteúdo relacionado à minha intenção mesmo quando não uso as mesmas palavras do texto original.
-
-**Why this priority**: A recuperação semântica oferece o primeiro benefício específico de RAG e pode
-ser validada antes da geração conversacional.
-
-**Independent Test**: Pode ser testada cadastrando anotações com temas conhecidos e fazendo consultas
-semanticamente equivalentes sem correspondência textual exata, verificando relevância e isolamento.
-
-**Acceptance Scenarios**:
-
-1. **Given** que o usuário possui anotações preparadas para recuperação, **When** consulta um conceito
-   usando termos diferentes dos textos originais, **Then** o sistema retorna suas anotações mais
-   semanticamente relevantes.
-2. **Given** que outro usuário possui uma anotação altamente relevante para a consulta, **When** o
-   usuário autenticado pesquisa, **Then** a anotação do outro usuário não é retornada nem influencia o
-   resultado.
-3. **Given** que uma anotação foi criada ou atualizada e persistida, **When** sua preparação semântica
-   estiver em andamento, **Then** o sistema indica esse estado e disponibiliza o conteúdo atual para
-   buscas e respostas em até 30 segundos.
-4. **Given** uma consulta sem anotações próprias suficientemente relacionadas, **When** a recuperação
-   é realizada, **Then** o sistema informa que não encontrou conteúdo pertinente, sem inserir dados de
-   outros usuários.
-
----
-
 ### User Story 3 - Consultar anotações pelo chatbot (Priority: P3)
 
 Como usuário autenticado, quero fazer perguntas em linguagem natural e receber respostas baseadas nas
 minhas anotações, identificando as fontes utilizadas, para consultar meu conhecimento pessoal com
 confiança.
 
-**Why this priority**: Esta história entrega o fluxo RAG completo sobre a base segura de gerenciamento
-e recuperação semântica.
+**Why this priority**: Esta história entrega o fluxo RAG completo sobre a base segura de gerenciamento,
+usando recuperação semântica somente como mecanismo interno de seleção de contexto.
 
 **Independent Test**: Pode ser testada com um conjunto controlado de anotações, perguntas cujas
 respostas estejam ou não no corpus e verificação das fontes apresentadas e do isolamento por usuário.
 
 **Acceptance Scenarios**:
 
-1. **Given** anotações próprias relevantes, **When** o usuário faz uma pergunta em linguagem natural,
-   **Then** o sistema recupera apenas suas anotações, usa-as como contexto e produz uma resposta
-   fundamentada nesse contexto.
+1. **Given** anotações próprias relevantes, **When** o modelo de linguagem local classifica uma mensagem
+   como `rag` e o resultado é validado, **Then** o sistema realiza retrieval semântico interno apenas
+   sobre suas anotações, usa o contexto autorizado e produz uma resposta fundamentada nesse contexto.
 2. **Given** que uma resposta utiliza anotações recuperadas, **When** a resposta é apresentada,
    **Then** ela é identificada como “Baseada nas suas anotações” e o usuário consegue identificar quais
    de suas anotações foram usadas como fontes, sem ser obrigado a visualizar um score numérico de
@@ -156,14 +143,17 @@ pessoal.
 **Why this priority**: Restaura uma capacidade presente na aplicação de referência e completa a
 equivalência funcional do chatbot sem enfraquecer o grounding das consultas dirigidas às anotações.
 
-**Independent Test**: Pode ser testada sem anotações relevantes, enviando perguntas gerais claras e
-verificando que recebem resposta em linguagem natural, sem fontes de anotações e sem mensagem de
-contexto insuficiente causada apenas pela ausência de notas relacionadas.
+**Independent Test**: Pode ser testada com um dataset controlado contendo “O que é Docker?”, “Qual é a
+capital do Peru?”, “Onde fica Machu Picchu?” e “Por que o céu é azul?”, verificando que todas passam
+primeiro pelo mesmo classificador primário `llama3:latest` e resultam em `general_chat`, com ou sem
+anotações semanticamente semelhantes, sem fontes e sem mensagem de contexto insuficiente. Esse resultado
+esperado é um critério de aceitação do dataset, não uma regra de correspondência textual.
 
 **Acceptance Scenarios**:
 
-1. **Given** um usuário autenticado, **When** ele faz uma pergunta geral que não depende de suas
-   anotações, **Then** o chatbot responde usando o conhecimento geral do modelo de linguagem local.
+1. **Given** um usuário autenticado, **When** ele envia uma pergunta geral que não depende de suas
+   anotações, **Then** o modelo de linguagem local a classifica primariamente, o resultado `general_chat`
+   é validado e somente então o chatbot responde usando o conhecimento geral desse modelo.
 2. **Given** uma pergunta geral e nenhuma anotação semanticamente relevante, **When** o chatbot
    responde, **Then** a ausência de anotações não impede a resposta nem produz, por si só, uma mensagem
    de contexto insuficiente.
@@ -179,8 +169,17 @@ contexto insuficiente causada apenas pela ausência de notas relacionadas.
 6. **Given** indisponibilidade de APIs externas de modelo de linguagem, **When** o usuário faz uma
    pergunta geral, **Then** a geração continua disponível por meio do modelo executado localmente.
 7. **Given** uma mensagem que combina claramente duas ou mais intenções entre criação, consulta às
-   anotações e conversa geral, **When** o chatbot a processa, **Then** solicita que o usuário escolha uma
-   única intenção e não responde à pergunta nem cria anotação antes do esclarecimento.
+   anotações e conversa geral, **When** o modelo de linguagem local a classifica como `clarification` e
+   o resultado é validado, **Then** o chatbot solicita que o usuário escolha uma única intenção e não
+   responde à pergunta nem cria anotação antes do esclarecimento.
+8. **Given** o dataset controlado com as perguntas “O que é Docker?”, “Qual é a capital do Peru?”, “Onde
+   fica Machu Picchu?” e “Por que o céu é azul?”, **When** cada mensagem passa primeiro pelo mesmo
+   classificador primário `llama3:latest`, **Then** todas resultam em `general_chat`; esse resultado é o
+   oráculo semântico do dataset e não pode ser decidido diretamente por regex, palavra-chave, prefixo ou
+   estrutura linguística.
+9. **Given** as consultas “O que eu anotei sobre Docker?” e “Segundo minhas anotações, qual era o horário
+   da reunião?”, **When** cada mensagem é classificada, **Then** o mesmo classificador local pode produzir
+   `rag`, antes de qualquer retrieval.
 
 ---
 
@@ -198,8 +197,9 @@ interpretação, persistência, confirmação e associação exclusiva ao usuár
 **Acceptance Scenarios**:
 
 1. **Given** um usuário autenticado, **When** ele solicita claramente a criação de uma anotação e
-   fornece título e conteúdo válidos, **Then** o sistema reconhece a intenção, cria e persiste a
-   anotação em seu nome e apresenta uma confirmação com conteúdo identificável.
+   fornece título e conteúdo válidos, **Then** o modelo de linguagem local classifica primariamente a
+   mensagem, o resultado `create_note` é validado e somente então o sistema cria e persiste a anotação
+   em seu nome e apresenta uma confirmação com conteúdo identificável.
 2. **Given** uma solicitação sem título ou sem conteúdo válido, **When** o sistema a interpreta,
    **Then** solicita a informação ausente e não cria uma anotação incompleta.
 3. **Given** uma mensagem que é apenas uma pergunta, **When** o chatbot a interpreta, **Then** não cria
@@ -245,16 +245,18 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
   produzir resposta indistinguível quanto à existência de dados alheios.
 - Uma solicitação de exclusão sem confirmação não deve remover nem alterar a anotação.
 - Criação ou atualização com título ou conteúdo vazio deve ser rejeitada com orientação compreensível.
-- Uma atualização deve invalidar o conteúdo anterior para recuperação; uma exclusão deve impedir que
-  conteúdo residual apareça em buscas, contexto, respostas ou fontes.
+- Uma atualização deve invalidar o conteúdo anterior para retrieval interno; uma exclusão deve impedir
+  que conteúdo residual apareça no contexto, nas respostas ou nas fontes.
 - Falha temporária na preparação semântica deve ser informada sem perder a anotação persistida; o
   sistema deve permitir que a preparação seja retomada e não deve apresentar a versão anterior como
   se fosse o conteúdo atual.
-- Consultas vazias ou sem intenção compreensível devem receber orientação e não iniciar geração.
+- Consultas vazias ou resultados de classificação inválidos devem falhar de modo fechado, receber
+  orientação e não iniciar retrieval, geração geral, criação ou qualquer outra ação.
 - Uma pergunta geral não deve ser recusada apenas porque não existem anotações semanticamente
   relevantes, e uma resposta geral não deve exibir fontes de anotações que não foram utilizadas.
 - A existência de anotações semanticamente semelhantes não deve transformar uma pergunta geral em
-  consulta às anotações quando a própria mensagem não expressar essa intenção.
+  consulta às anotações; retrieval e seus resultados ocorrem somente depois de classificação `rag`
+  validada e nunca determinam a intenção.
 - Uma consulta explicitamente dirigida às anotações sem contexto suficiente deve informar a
   insuficiência, mesmo que o modelo possua conhecimento geral sobre o tema.
 - Quando não for possível distinguir com segurança entre consulta às anotações e conversa geral, o
@@ -262,6 +264,12 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
 - Mensagens que combinem claramente duas ou mais intenções entre criação, consulta às anotações e
   conversa geral devem solicitar que o usuário escolha uma única intenção; antes do esclarecimento, o
   chatbot não deve responder à pergunta nem criar anotação.
+- Regex, palavras-chave, prefixos, formato interrogativo ou outras heurísticas não devem decidir
+  diretamente a intenção nem substituir a classificação semântica primária do modelo de linguagem
+  local; regras determinísticas limitam-se a normalização, validação de schema, segurança e fail-closed.
+- Uma intenção válida `clarification` deve solicitar esclarecimento ao usuário sem executar retrieval,
+  resposta geral, criação ou outra ação. Falha técnica, saída inválida, fora do schema ou com intenção
+  não permitida deve apresentar erro acionável e falhar de modo fechado, também sem executar ação.
 - Uma resposta com várias fontes deve permitir distinguir cada anotação utilizada; fontes excluídas ou
   de outro usuário nunca devem ser exibidas.
 - Conteúdo de anotação que contenha instruções deve ser tratado como dado do usuário e não deve alterar
@@ -292,19 +300,26 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
   usada como contexto ou citada como fonte para qualquer usuário diferente de seu proprietário.
 - **FR-008**: O sistema DEVE persistir usuários e anotações para que permaneçam disponíveis após
   reinicializações da aplicação.
-- **FR-009**: O sistema DEVE persistir imediatamente criações e atualizações, indicar quando a
-  preparação semântica estiver em andamento e disponibilizar o conteúdo atual para recuperação em até
-  30 segundos, refletindo também as exclusões.
-- **FR-010**: O sistema DEVE permitir que um usuário autenticado recupere suas anotações por relevância
-  semântica sem depender exclusivamente de correspondência textual exata.
+- **FR-009**: O sistema DEVE persistir imediatamente criações e atualizações, que DEVEM disparar o ciclo
+  assíncrono de indexação das notas, incluindo geração de embeddings, persistência vetorial e atualização
+  do índice, independentemente de mensagens ou intenções do chatbot. O sistema DEVE indicar quando essa
+  preparação interna estiver em andamento e disponibilizar o conteúdo atual ao retrieval interno do RAG
+  em até 30 segundos, refletindo também atualizações e exclusões; esse mecanismo NÃO DEVE ser exposto
+  como tela, menu, fluxo dedicado ou funcionalidade independente de busca para o usuário.
+- **FR-010**: Depois de uma mensagem ser classificada como `rag` e o resultado ser validado, o sistema
+  DEVE executar internamente a recuperação vetorial por relevância semântica, sem depender exclusivamente
+  de correspondência textual exata, selecionar somente o contexto autorizado pertencente ao usuário
+  autenticado, fundamentar a resposta nesse contexto e apresentar as fontes efetivamente utilizadas;
+  NÃO DEVE existir endpoint público exclusivo nem operação independente de busca semântica voltada ao
+  usuário.
 - **FR-011**: O corpus disponível à recuperação e à geração fundamentada em anotações DEVE conter
   exclusivamente anotações cadastradas na aplicação; essa restrição de corpus não impede a geração
   separada de respostas de conversa geral que não utilizem anotações.
 - **FR-012**: O sistema DEVE oferecer uma interface conversacional na qual o usuário autenticado possa
   enviar perguntas e visualizar respostas em linguagem natural.
-- **FR-013**: Para cada pergunta cujo objetivo seja consultar informações existentes nas anotações, o
-  sistema DEVE recuperar anotações semanticamente relevantes pertencentes exclusivamente ao usuário
-  autenticado e usá-las como contexto da resposta.
+- **FR-013**: Para cada mensagem com classificação `rag` validada, o sistema DEVE recuperar internamente
+  anotações semanticamente relevantes pertencentes exclusivamente ao usuário autenticado, selecionar o
+  contexto autorizado e usá-lo na resposta grounded com fontes.
 - **FR-014**: Quando uma consulta dirigida às anotações não possuir contexto recuperado suficiente, o
   sistema DEVE indicar a insuficiência sem preencher lacunas com conhecimento geral, sem atribuir às
   anotações informações que elas não contenham e sem converter silenciosamente a consulta em conversa
@@ -319,21 +334,26 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
   anotação para o usuário autenticado e fornecer uma confirmação identificável.
 - **FR-018**: O sistema DEVE fornecer configuração e instruções de containerização suficientes para
   executar de modo reproduzível os componentes necessários ao fluxo principal.
-- **FR-019**: O modelo de linguagem usado no fluxo principal DEVE poder ser executado localmente, e a
-  geração principal NÃO DEVE depender obrigatoriamente de uma API externa de modelo de linguagem.
+- **FR-019**: `llama3:latest` DEVE ser o único modelo de linguagem generativo e classificador do fluxo
+  principal, executado localmente, e a geração ou classificação NÃO DEVE depender de uma API externa de
+  modelo de linguagem nem introduzir um segundo LLM.
 - **FR-020**: Falhas DEVEM resultar em comportamento previsível e mensagens compreensíveis, sem expor
   dados de outros usuários, informações sensíveis ou detalhes internos.
 - **FR-021**: Após confirmação do usuário, o sistema DEVE excluir permanentemente a anotação e todas as
   suas representações recuperáveis, sem oferecer restauração ou lixeira.
-- **FR-022**: O chatbot DEVE distinguir solicitações explícitas de criação de anotação, consultas
-  dirigidas às anotações e perguntas gerais independentes das anotações pela intenção expressa na
-  mensagem. Referências ao que o usuário anotou, registrou ou possui em suas notas DEVEM indicar
-  consulta às anotações; perguntas independentes das notas DEVEM poder ser respondidas pelo modelo de
-  linguagem local sem exigir contexto recuperado. A existência de anotações semanticamente semelhantes
-  NÃO DEVE, por si só, alterar a intenção expressa na mensagem. Mensagens que combinem claramente duas
-  ou mais dessas intenções DEVEM solicitar que o usuário escolha uma única intenção; antes do
-  esclarecimento, o chatbot NÃO DEVE responder à pergunta nem criar anotação.
-- **FR-023**: Quando uma resposta de conversa geral não utilizar anotações, o sistema NÃO DEVE exibir
+- **FR-022**: Toda mensagem conversacional DEVE passar primeiro por `llama3:latest` como classificador
+  semântico primário, produzindo exatamente uma intenção entre `rag`, `general_chat`, `create_note` e
+  `clarification`; o resultado DEVE ser validado antes do roteamento e antes de retrieval, resposta
+  geral, criação ou qualquer outra ação. Regex, palavras-chave, prefixos, estrutura linguística ou
+  outras heurísticas NÃO DEVEM decidir diretamente a intenção nem substituir a classificação do modelo.
+  Regras determinísticas são permitidas somente para normalização, validação de schema, segurança e
+  comportamento fail-closed. Resultados de retrieval semântico NÃO DEVEM determinar nem alterar a
+  intenção, pois retrieval somente pode ocorrer após uma classificação `rag` validada. Uma intenção
+  válida `clarification` DEVE solicitar esclarecimento sem executar ação. Falha técnica ou resultado
+  inválido, fora do schema, com intenção não permitida ou inseguro DEVE apresentar erro acionável e
+  falhar de modo fechado, sem executar ação.
+- **FR-023**: Após uma classificação `general_chat` validada, quando a resposta não utilizar anotações,
+  o sistema NÃO DEVE exibir
   nem atribuir anotações como fontes e NÃO DEVE apresentar a resposta como fundamentada no corpus do
   usuário; a interface DEVE identificar explicitamente o modo como “Resposta geral”.
 
@@ -348,8 +368,8 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
   permite compará-la semanticamente com uma consulta; mantém vínculo inequívoco com a anotação e seu
   proprietário e deixa de ser utilizável após atualização substitutiva ou exclusão.
 - **Consulta conversacional**: Pergunta ou solicitação em linguagem natural feita por um usuário
-  autenticado, distinguida como pedido de criação, consulta dirigida às anotações ou pergunta geral
-  independente das anotações.
+  autenticado, classificada primariamente pelo modelo de linguagem local como `rag`, `general_chat`,
+  `create_note` ou `clarification` antes do roteamento e de qualquer ação.
 - **Resposta conversacional**: Resultado apresentado ao usuário; em consulta às anotações, é
   fundamentado no corpus permitido e acompanhado das fontes utilizadas; em conversa geral, utiliza o
   conhecimento do modelo local sem atribuir fontes de anotações não utilizadas.
@@ -361,14 +381,15 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
 ### Measurable Outcomes
 
 - **SC-001**: Em testes de aceitação, 100% das tentativas de acesso cruzado entre usuários são negadas
-  e nenhum conteúdo alheio aparece em listagens, buscas, respostas ou fontes.
+  e nenhum conteúdo alheio aparece em listagens, contextos recuperados, respostas ou fontes.
 - **SC-002**: Usuários concluem cadastro, autenticação e criação da primeira anotação em até 3 minutos
   em pelo menos 90% dos testes moderados, sem assistência técnica.
 - **SC-003**: Todas as cinco operações de gerenciamento preservam o estado esperado após reinicialização
   em 100% dos cenários de persistência definidos.
-- **SC-004**: Em um conjunto de consultas semanticamente equivalentes sem palavras-chave idênticas,
-  pelo menos 85% apresentam, entre os cinco primeiros resultados, uma anotação própria julgada
-  relevante pelo conjunto de teste.
+- **SC-004**: Em um conjunto de mensagens classificadas e validadas como `rag`, com consultas
+  semanticamente equivalentes sem palavras-chave idênticas, pelo menos 85% incluem entre os cinco itens
+  de contexto selecionados internamente uma anotação própria julgada relevante pelo conjunto de teste,
+  sem expor uma funcionalidade independente de busca ao usuário.
 - **SC-005**: Pelo menos 90% das perguntas respondíveis no conjunto de aceitação recebem resposta
   compatível com o conteúdo das anotações fornecidas, sem afirmações contraditórias às fontes.
 - **SC-006**: Em 100% das respostas que utilizam contexto recuperado, todas as anotações efetivamente
@@ -386,12 +407,16 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
 - **SC-010**: O conjunto completo de aceitação do fluxo principal funciona com APIs externas de modelo
   de linguagem indisponíveis, usando geração executada localmente.
 - **SC-011**: Em pelo menos 95% das criações e atualizações do conjunto de aceitação, a versão atual da
-  anotação fica disponível para busca semântica e respostas em até 30 segundos; durante o intervalo, o
-  estado de preparação é visível ao usuário.
-- **SC-012**: Em 100% das perguntas gerais claras do conjunto de aceitação, a ausência de anotações
-  semanticamente relevantes não causa, por si só, recusa por contexto insuficiente, e as respostas que
-  não utilizam anotações são identificadas como “Resposta geral” e apresentadas sem fontes do corpus do
-  usuário; respostas que utilizam anotações são identificadas como “Baseada nas suas anotações”.
+  anotação fica disponível ao retrieval interno do RAG e às respostas em até 30 segundos; durante o
+  intervalo, o estado de preparação é visível ao usuário.
+- **SC-012**: Em 100% das mensagens conversacionais do conjunto de aceitação, `llama3:latest` atua como
+  classificador semântico primário antes de retrieval, resposta geral, criação ou qualquer ação, e o
+  roteamento ocorre somente após validação de uma intenção `rag`, `general_chat`, `create_note` ou
+  `clarification`. Em 100% das perguntas gerais claras, inclusive nos quatro formatos linguísticos
+  exemplificados em US6, a ausência ou presença de anotações semanticamente semelhantes não determina
+  a intenção nem causa, por si só, recusa por contexto insuficiente; respostas que não utilizam
+  anotações são identificadas como “Resposta geral” e apresentadas sem fontes, enquanto respostas RAG
+  são grounded, identificadas como “Baseada nas suas anotações” e acompanhadas de fontes.
 
 ## Assumptions
 
@@ -399,13 +424,19 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
   parte desta feature.
 - O nome de usuário é fornecido pela pessoa no cadastro e possui uma regra de equivalência consistente,
   documentada ao usuário, para detectar conflitos de caixa, espaços ou outras variações aplicáveis.
-- Recuperação semântica pode retornar nenhuma, uma ou várias anotações, conforme relevância suficiente;
-  não existe obrigação de exibir score numérico.
+- Recuperação semântica é exclusivamente um mecanismo interno do RAG e pode selecionar nenhuma, uma ou
+  várias anotações, conforme relevância suficiente; embeddings, indexação, armazenamento e recuperação
+  vetorial, isolamento por usuário, seleção de contexto, grounding e fontes permanecem preservados. Não
+  existe tela, menu, fluxo dedicado, endpoint público exclusivo ou obrigação de exibir score numérico.
 - Respostas a consultas dirigidas às anotações devem se limitar ao que pode ser sustentado pelo corpus
   do usuário e não podem preencher lacunas com conhecimento geral. Respostas a perguntas gerais podem
   utilizar o conhecimento do modelo de linguagem local, desde que não sejam apresentadas como
-  provenientes das anotações nem exibam fontes de anotações não utilizadas. A existência ou relevância
-  de anotações não determina o modo conversacional sem que a mensagem expresse intenção de consultá-las.
+  provenientes das anotações nem exibam fontes de anotações não utilizadas. Toda mensagem é classificada
+  primariamente por `llama3:latest`; a existência ou relevância de anotações, palavras-chave, regex,
+  prefixos ou estrutura linguística não determina diretamente o modo conversacional.
+- `llama3:latest` permanece como único modelo de linguagem generativo e classificador. A classificação
+  precede retrieval, resposta geral, criação e qualquer ação; regras determinísticas limitam-se a
+  normalização, validação de schema, segurança e fail-closed.
 - A criação via chatbot exige título e conteúdo válidos, mas não exige que o usuário use um comando
   rígido ou uma frase específica.
 - A configuração containerizada e a execução local destinam-se ao fluxo principal em ambiente

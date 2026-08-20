@@ -85,8 +85,8 @@ Required outcomes:
 - Recall@5 atinge pelo menos 85% no dataset em português;
 - pelo menos 90% das respostas respondíveis são compatíveis com as notas;
 - pelo menos 95% das criações claras via chatbot produzem exatamente uma nota;
-- saídas inválidas do classificador por completion falham fechado após no máximo uma tentativa de
-  reparo, sem criar nota;
+- saídas inválidas do classificador por completion retornam erro acionável e falham fechado após no
+  máximo uma tentativa de reparo, sem retrieval, resposta ou criação;
 - nenhuma pergunta sem evidência recebe uma resposta apresentada como fundamentada.
 
 ## 5. End-to-End Acceptance Walkthrough
@@ -112,11 +112,12 @@ Expected: nenhuma senha aparece em banco como texto simples, resposta, log ou fe
 
 Expected: as cinco operações funcionam e o estado sobrevive à reinicialização.
 
-### 5.3 Semantic Preparation and Search
+### 5.3 Semantic Preparation for Internal RAG Retrieval
 
 1. Aguarde no máximo 30 segundos até a nota de Alice ficar `ready`.
-2. Pesquise `decisões tomadas pelo time`, sem repetir o título literalmente.
-3. Confirme que a nota relevante aparece sem score público.
+2. Envie ao chatbot `O que eu anotei sobre as decisões tomadas pelo time?`, sem repetir o título.
+3. Confirme `intent=rag` e, por instrumentação/teste de integração, que a nota relevante foi selecionada
+   internamente sem score público nem endpoint, tela ou menu de busca semântica.
 4. Pare Ollama, atualize a nota e confirme persistência + estado de falha/preparação seguro.
 5. Reinicie Ollama, solicite retry e confirme publicação apenas da versão atual.
 
@@ -126,13 +127,13 @@ Expected: a versão antiga nunca aparece como atual; falha de embedding não per
 
 1. Como Bob, crie uma nota semanticamente quase idêntica com conteúdo-armadilha único.
 2. Como Alice, tente GET/PATCH/DELETE usando o UUID da nota de Bob.
-3. Pesquise e pergunte ao chatbot por termos altamente relacionados à nota de Bob.
+3. Pergunte ao chatbot por termos altamente relacionados à nota de Bob e inspecione o contexto interno.
 4. Repita no sentido inverso.
 
 Expected:
 
 - operações por UUID alheio retornam o mesmo 404 de item inexistente;
-- busca, contexto, resposta e fontes incluem zero bytes, IDs, títulos ou fatos do outro usuário;
+- retrieval interno, contexto, resposta e fontes incluem zero bytes, IDs, títulos ou fatos do outro usuário;
 - logs e erros também não revelam existência ou conteúdo alheio.
 
 ### 5.5 RAG Grounding and Sources
@@ -155,17 +156,23 @@ Expected:
 ### 5.6 General Chat and Intent Routing
 
 1. Pergunte `O que é Docker?` sem possuir nota relacionada.
-2. Confirme `intent=general_chat`, indicador `Resposta geral`, resposta do `llama3:latest` e `sources=[]`.
+2. Confirme que `llama3:latest` classifica primeiro, o backend valida `intent=general_chat` e somente
+   então o mesmo modelo gera a resposta com indicador `Resposta geral` e `sources=[]`.
 3. Crie uma nota sobre Docker, aguarde `ready` e repita exatamente `O que é Docker?`.
 4. Confirme que a nota semelhante não altera `intent=general_chat` e não aparece como fonte.
 5. Envie uma mensagem realmente ambígua entre consulta às notas e conversa geral.
 6. Envie uma única mensagem que combine criação de nota e pergunta.
+7. Simule indisponibilidade do classificador, schema inválido e intenção fora da enumeração.
 
 Expected:
 
-- intenção é decidida antes de retrieval, pela mensagem e não pelos resultados semanticamente próximos;
+- toda mensagem é classificada primariamente por `llama3:latest` e validada antes de roteamento;
+- regex, palavras-chave, prefixos e estrutura da pergunta não decidem nem substituem a intenção;
+- retrieval não é executado para classificar e resultados semanticamente próximos não alteram a intenção;
 - ambiguidade retorna `intent=clarification` e `needs_clarification=true`;
 - múltiplas intenções pedem escolha de uma única intenção, sem resposta substantiva e sem nota criada;
+- falha técnica, schema inválido ou intenção inválida retorna envelope de erro acionável e fail-closed,
+  sem `intent=clarification`, retrieval, resposta ou criação;
 - conversa geral usa o mesmo modelo local `llama3:latest`, sem segundo LLM ou API externa obrigatória.
 
 ### 5.7 Create Note Through Chat
@@ -182,7 +189,7 @@ payload são ignorados/rejeitados.
 
 1. Na UI, inicie exclusão e cancele; confirme que nada mudou.
 2. Confirme a exclusão.
-3. Verifique listagem, consulta, busca, chatbot e fontes.
+3. Verifique listagem, consulta, retrieval interno do chatbot e fontes.
 4. Consulte diretamente por meio dos testes de integração as tabelas de chunks/jobs.
 
 Expected: nota, chunks e jobs foram removidos permanentemente e não há restauração/lixeira.
@@ -203,7 +210,7 @@ docker compose ps
 ```
 
 Expected: usuários e notas persistem; jobs em processamento são recuperados após expirar o lease;
-modelos permanecem no volume. Em seguida, desconecte a rede e repita busca/chat para confirmar que o
+modelos permanecem no volume. Em seguida, desconecte a rede e repita o chat RAG/geral para confirmar que o
 fluxo principal não usa API externa.
 
 ## 7. Inspect Without Leaking Secrets
