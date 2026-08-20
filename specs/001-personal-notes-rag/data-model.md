@@ -169,19 +169,25 @@ deduplicated by note for public sources. Internal score is not exposed by the v1
 
 Backend-validated result parsed from a `llama3:latest` completion requested in JSON format:
 
-- `intent`: `answer` or `create_note`
+- `intent`: `rag`, `general_chat`, `create_note` or `clarification`
 - `title`: required only for an executable create intent
 - `content`: required only for an executable create intent
-- `clarification`: present when title/content or intent is ambiguous
+- `clarification`: present when title/content or intent is ambiguous, or when multiple intents coexist
 
 The decision cannot contain or select `user_id`. The backend applies a strict schema; after at most one
 repair attempt with the same model, invalid or ambiguous structures fail closed and request
-clarification without persistence. No native tool-calling capability is assumed.
+clarification without persistence or substantive answer. Intent is validated before retrieval:
+`general_chat` never becomes `rag` because a similar note exists, while `rag` without sufficient
+context never falls back to `general_chat`. No native tool-calling capability is assumed.
 
 ### ChatResponse
 
-Contains `intent`, user-facing answer, authorized sources and optional created note. Conversation history
-is not persisted in v1. The browser may display current-page messages until refresh.
+Contains `intent`, user-facing answer, authorized sources and optional created note. The existing
+`needs_clarification` flag remains for compatibility. For `general_chat`, `sources` is empty and the UI
+renders “Resposta geral”. For a grounded `rag` response, sources are backend-validated and the UI
+renders “Baseada nas suas anotações”; an insufficient `rag` response keeps `intent=rag`, uses empty
+sources and does not fall back. `clarification` has no sources or created note. Conversation history is
+not persisted in v1. The browser may display current-page messages until refresh.
 
 ## Row-Level Security Design
 

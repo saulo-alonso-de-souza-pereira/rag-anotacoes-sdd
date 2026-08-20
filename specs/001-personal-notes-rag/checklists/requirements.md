@@ -35,3 +35,5 @@
 - References to containerization, local model execution, and absence of mandatory external LLM APIs
   are product constraints explicitly supplied by the feature description; no implementation choice,
   topology, or specific technology was introduced.
+- Controlled post-implementation revision validated on 2026-08-19. All 16 checks remain satisfied
+  after restoring the omitted general-conversation behavior; no clarification markers remain.

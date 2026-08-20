@@ -9,6 +9,14 @@
 **Input**: User description: "Aplicação de gerenciamento de anotações pessoais com autenticação,
 isolamento entre usuários, recuperação semântica e interação por chatbot com RAG local."
 
+## Revision History
+
+- **2026-08-19 — Revisão controlada pós-implementação**: Uma verificação de equivalência funcional
+  realizada após a primeira implementação e validação do experimento identificou que a capacidade de
+  conversa geral já existente na aplicação de referência não havia sido registrada na
+  Especificação-Base. Esta revisão restaura essa equivalência nos artefatos experimentais; não introduz
+  uma melhoria funcional nova e não reclassifica resultados da primeira implementação.
+
 ## Clarifications
 
 ### Session 2026-08-17
@@ -23,6 +31,19 @@ isolamento entre usuários, recuperação semântica e interação por chatbot c
   busca semântica e respostas do chatbot? → A: Em até 30 segundos, indicando preparação.
 - Q: Qual credencial o usuário deverá fornecer junto ao nome de usuário para se autenticar? → A: Senha
   definida pelo usuário.
+
+### Session 2026-08-19
+
+- Q: Qual regra funcional deve determinar se uma mensagem clara é consulta às anotações ou conversa
+  geral? → A: A intenção expressa na própria mensagem determina o modo: referências ao que o usuário
+  anotou, registrou ou possui em suas notas indicam RAG; perguntas independentes das notas indicam
+  conversa geral; a existência de notas semanticamente semelhantes não altera essa intenção.
+- Q: Como a interface deve distinguir visualmente uma resposta geral de uma resposta fundamentada nas
+  anotações? → A: Exibir indicadores explícitos nos dois modos, “Resposta geral” e “Baseada nas suas
+  anotações”, mantendo fontes somente no modo RAG.
+- Q: O que o chatbot deve fazer quando uma única mensagem combina claramente duas ou mais intenções,
+  como conversa geral, consulta às anotações e criação? → A: Solicitar que o usuário escolha uma única
+  intenção; antes do esclarecimento, não responder à pergunta nem criar anotação.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -112,8 +133,9 @@ respostas estejam ou não no corpus e verificação das fontes apresentadas e do
    **Then** o sistema recupera apenas suas anotações, usa-as como contexto e produz uma resposta
    fundamentada nesse contexto.
 2. **Given** que uma resposta utiliza anotações recuperadas, **When** a resposta é apresentada,
-   **Then** o usuário consegue identificar quais de suas anotações foram usadas como fontes, sem ser
-   obrigado a visualizar um score numérico de relevância.
+   **Then** ela é identificada como “Baseada nas suas anotações” e o usuário consegue identificar quais
+   de suas anotações foram usadas como fontes, sem ser obrigado a visualizar um score numérico de
+   relevância.
 3. **Given** que as anotações próprias não oferecem base suficiente, **When** o usuário faz uma
    pergunta, **Then** o sistema comunica a insuficiência de contexto em vez de apresentar como fato uma
    resposta não sustentada pelas anotações.
@@ -122,6 +144,43 @@ respostas estejam ou não no corpus e verificação das fontes apresentadas e do
    pelo conteúdo alheio.
 5. **Given** uma sessão de uso normal, **When** o usuário interage com o chatbot, **Then** perguntas e
    respostas são apresentadas em uma interface conversacional compreensível.
+
+---
+
+### User Story 6 - Fazer perguntas gerais ao chatbot (Priority: P3)
+
+Como usuário autenticado, quero fazer perguntas gerais que não dependam das minhas anotações e receber
+respostas do modelo de linguagem local para usar o chatbot também fora da consulta ao meu conhecimento
+pessoal.
+
+**Why this priority**: Restaura uma capacidade presente na aplicação de referência e completa a
+equivalência funcional do chatbot sem enfraquecer o grounding das consultas dirigidas às anotações.
+
+**Independent Test**: Pode ser testada sem anotações relevantes, enviando perguntas gerais claras e
+verificando que recebem resposta em linguagem natural, sem fontes de anotações e sem mensagem de
+contexto insuficiente causada apenas pela ausência de notas relacionadas.
+
+**Acceptance Scenarios**:
+
+1. **Given** um usuário autenticado, **When** ele faz uma pergunta geral que não depende de suas
+   anotações, **Then** o chatbot responde usando o conhecimento geral do modelo de linguagem local.
+2. **Given** uma pergunta geral e nenhuma anotação semanticamente relevante, **When** o chatbot
+   responde, **Then** a ausência de anotações não impede a resposta nem produz, por si só, uma mensagem
+   de contexto insuficiente.
+3. **Given** uma pergunta geral e uma ou mais anotações semanticamente semelhantes, **When** a mensagem
+   não indica intenção de consultar o que foi anotado, **Then** o chatbot mantém a conversa geral e não
+   transforma a mensagem em consulta às anotações por causa dos resultados recuperáveis.
+4. **Given** uma resposta de conversa geral que não utilizou anotações, **When** ela é apresentada,
+   **Then** ela é identificada como “Resposta geral”, nenhuma anotação é exibida ou atribuída como fonte
+   e a resposta não é apresentada como fundamentada no corpus do usuário.
+5. **Given** uma pergunta explicitamente dirigida às anotações do usuário, mas sem contexto suficiente
+   no corpus, **When** o chatbot processa a consulta, **Then** informa a insuficiência de contexto e não
+   a substitui silenciosamente por uma resposta de conhecimento geral.
+6. **Given** indisponibilidade de APIs externas de modelo de linguagem, **When** o usuário faz uma
+   pergunta geral, **Then** a geração continua disponível por meio do modelo executado localmente.
+7. **Given** uma mensagem que combina claramente duas ou mais intenções entre criação, consulta às
+   anotações e conversa geral, **When** o chatbot a processa, **Then** solicita que o usuário escolha uma
+   única intenção e não responde à pergunta nem cria anotação antes do esclarecimento.
 
 ---
 
@@ -191,10 +250,18 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
 - Falha temporária na preparação semântica deve ser informada sem perder a anotação persistida; o
   sistema deve permitir que a preparação seja retomada e não deve apresentar a versão anterior como
   se fosse o conteúdo atual.
-- Consultas vazias ou sem intenção compreensível devem receber orientação e não iniciar geração sem
-  contexto útil.
-- Pedidos no chatbot que misturem pergunta e criação devem exigir confirmação ou esclarecimento quando
-  a ação pretendida não puder ser determinada com segurança.
+- Consultas vazias ou sem intenção compreensível devem receber orientação e não iniciar geração.
+- Uma pergunta geral não deve ser recusada apenas porque não existem anotações semanticamente
+  relevantes, e uma resposta geral não deve exibir fontes de anotações que não foram utilizadas.
+- A existência de anotações semanticamente semelhantes não deve transformar uma pergunta geral em
+  consulta às anotações quando a própria mensagem não expressar essa intenção.
+- Uma consulta explicitamente dirigida às anotações sem contexto suficiente deve informar a
+  insuficiência, mesmo que o modelo possua conhecimento geral sobre o tema.
+- Quando não for possível distinguir com segurança entre consulta às anotações e conversa geral, o
+  chatbot deve solicitar esclarecimento em vez de atribuir silenciosamente a mensagem ao modo errado.
+- Mensagens que combinem claramente duas ou mais intenções entre criação, consulta às anotações e
+  conversa geral devem solicitar que o usuário escolha uma única intenção; antes do esclarecimento, o
+  chatbot não deve responder à pergunta nem criar anotação.
 - Uma resposta com várias fontes deve permitir distinguir cada anotação utilizada; fontes excluídas ou
   de outro usuário nunca devem ser exibidas.
 - Conteúdo de anotação que contenha instruções deve ser tratado como dado do usuário e não deve alterar
@@ -230,17 +297,21 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
   30 segundos, refletindo também as exclusões.
 - **FR-010**: O sistema DEVE permitir que um usuário autenticado recupere suas anotações por relevância
   semântica sem depender exclusivamente de correspondência textual exata.
-- **FR-011**: O corpus disponível ao mecanismo de recuperação e geração DEVE conter exclusivamente
-  anotações cadastradas na aplicação.
+- **FR-011**: O corpus disponível à recuperação e à geração fundamentada em anotações DEVE conter
+  exclusivamente anotações cadastradas na aplicação; essa restrição de corpus não impede a geração
+  separada de respostas de conversa geral que não utilizem anotações.
 - **FR-012**: O sistema DEVE oferecer uma interface conversacional na qual o usuário autenticado possa
   enviar perguntas e visualizar respostas em linguagem natural.
-- **FR-013**: Para cada pergunta do chatbot, o sistema DEVE recuperar anotações semanticamente
-  relevantes pertencentes exclusivamente ao usuário autenticado e usá-las como contexto da resposta.
-- **FR-014**: O sistema DEVE indicar quando o contexto recuperado for insuficiente para sustentar uma
-  resposta, sem atribuir às anotações informações que elas não contenham.
+- **FR-013**: Para cada pergunta cujo objetivo seja consultar informações existentes nas anotações, o
+  sistema DEVE recuperar anotações semanticamente relevantes pertencentes exclusivamente ao usuário
+  autenticado e usá-las como contexto da resposta.
+- **FR-014**: Quando uma consulta dirigida às anotações não possuir contexto recuperado suficiente, o
+  sistema DEVE indicar a insuficiência sem preencher lacunas com conhecimento geral, sem atribuir às
+  anotações informações que elas não contenham e sem converter silenciosamente a consulta em conversa
+  geral.
 - **FR-015**: Quando uma resposta usar anotações como contexto, o sistema DEVE permitir que o usuário
-  identifique cada anotação utilizada como fonte; a exibição de score numérico de relevância é
-  opcional.
+  identifique o modo como “Baseada nas suas anotações” e cada anotação utilizada como fonte; a exibição
+  de score numérico de relevância é opcional.
 - **FR-016**: O chatbot DEVE reconhecer solicitações explícitas de criação de anotação em linguagem
   natural, obter esclarecimento quando faltar conteúdo essencial e evitar criação quando a intenção
   não estiver suficientemente clara.
@@ -254,6 +325,17 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
   dados de outros usuários, informações sensíveis ou detalhes internos.
 - **FR-021**: Após confirmação do usuário, o sistema DEVE excluir permanentemente a anotação e todas as
   suas representações recuperáveis, sem oferecer restauração ou lixeira.
+- **FR-022**: O chatbot DEVE distinguir solicitações explícitas de criação de anotação, consultas
+  dirigidas às anotações e perguntas gerais independentes das anotações pela intenção expressa na
+  mensagem. Referências ao que o usuário anotou, registrou ou possui em suas notas DEVEM indicar
+  consulta às anotações; perguntas independentes das notas DEVEM poder ser respondidas pelo modelo de
+  linguagem local sem exigir contexto recuperado. A existência de anotações semanticamente semelhantes
+  NÃO DEVE, por si só, alterar a intenção expressa na mensagem. Mensagens que combinem claramente duas
+  ou mais dessas intenções DEVEM solicitar que o usuário escolha uma única intenção; antes do
+  esclarecimento, o chatbot NÃO DEVE responder à pergunta nem criar anotação.
+- **FR-023**: Quando uma resposta de conversa geral não utilizar anotações, o sistema NÃO DEVE exibir
+  nem atribuir anotações como fontes e NÃO DEVE apresentar a resposta como fundamentada no corpus do
+  usuário; a interface DEVE identificar explicitamente o modo como “Resposta geral”.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -266,9 +348,11 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
   permite compará-la semanticamente com uma consulta; mantém vínculo inequívoco com a anotação e seu
   proprietário e deixa de ser utilizável após atualização substitutiva ou exclusão.
 - **Consulta conversacional**: Pergunta ou solicitação em linguagem natural feita por um usuário
-  autenticado, incluindo a intenção interpretada quando houver pedido de criação.
-- **Resposta conversacional**: Resultado apresentado ao usuário, fundamentado no contexto permitido e
-  acompanhado das fontes utilizadas quando aplicável.
+  autenticado, distinguida como pedido de criação, consulta dirigida às anotações ou pergunta geral
+  independente das anotações.
+- **Resposta conversacional**: Resultado apresentado ao usuário; em consulta às anotações, é
+  fundamentado no corpus permitido e acompanhado das fontes utilizadas; em conversa geral, utiliza o
+  conhecimento do modelo local sem atribuir fontes de anotações não utilizadas.
 - **Fonte**: Referência identificável a uma anotação própria efetivamente utilizada como contexto de
   uma resposta.
 
@@ -304,6 +388,10 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
 - **SC-011**: Em pelo menos 95% das criações e atualizações do conjunto de aceitação, a versão atual da
   anotação fica disponível para busca semântica e respostas em até 30 segundos; durante o intervalo, o
   estado de preparação é visível ao usuário.
+- **SC-012**: Em 100% das perguntas gerais claras do conjunto de aceitação, a ausência de anotações
+  semanticamente relevantes não causa, por si só, recusa por contexto insuficiente, e as respostas que
+  não utilizam anotações são identificadas como “Resposta geral” e apresentadas sem fontes do corpus do
+  usuário; respostas que utilizam anotações são identificadas como “Baseada nas suas anotações”.
 
 ## Assumptions
 
@@ -313,8 +401,11 @@ configuração e instruções fornecidas para iniciar a solução, executar o fl
   documentada ao usuário, para detectar conflitos de caixa, espaços ou outras variações aplicáveis.
 - Recuperação semântica pode retornar nenhuma, uma ou várias anotações, conforme relevância suficiente;
   não existe obrigação de exibir score numérico.
-- A resposta do chatbot deve se limitar ao que pode ser sustentado pelo corpus do usuário; conhecimento
-  externo não integra o corpus nem deve ser apresentado como se viesse das anotações.
+- Respostas a consultas dirigidas às anotações devem se limitar ao que pode ser sustentado pelo corpus
+  do usuário e não podem preencher lacunas com conhecimento geral. Respostas a perguntas gerais podem
+  utilizar o conhecimento do modelo de linguagem local, desde que não sejam apresentadas como
+  provenientes das anotações nem exibam fontes de anotações não utilizadas. A existência ou relevância
+  de anotações não determina o modo conversacional sem que a mensagem expresse intenção de consultá-las.
 - A criação via chatbot exige título e conteúdo válidos, mas não exige que o usuário use um comando
   rígido ou uma frase específica.
 - A configuração containerizada e a execução local destinam-se ao fluxo principal em ambiente

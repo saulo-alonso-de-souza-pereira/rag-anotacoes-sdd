@@ -119,7 +119,8 @@ modelo/formatação é usado na indexação e consulta. Troca de modelo exige re
 
 **Decision**: Busca cosseno exata pré-filtrada por usuário, top-5 e limiar inicial configurável de
 similaridade 0,55. Calibrar o limiar com conjunto fixo em português; medir Recall@5, contexto indevido e
-perguntas sem evidência. Se nenhum chunk passar, não chamar geração fundamentada e retornar fontes vazias.
+perguntas sem evidência. No modo RAG, se nenhum chunk passar, não chamar geração fundamentada e retornar
+fontes vazias com indicação de insuficiência. Essa ausência não decide se uma mensagem é conversa geral.
 
 **Rationale**: Scores não têm interpretação universal. Configuração versionada permite ajuste sem
 codificar uma suposição como regra de domínio. Busca exata maximiza recall no envelope inicial.
@@ -183,16 +184,21 @@ inventadas e mantém rastreabilidade. Conteúdo de notas é dado não confiável
 **Alternatives considered**:
 
 - Confiar nas citações do modelo: simples, mas permite IDs inventados.
-- Responder com conhecimento geral: viola o corpus exclusivo.
+- Responder com conhecimento geral dentro de uma consulta às notas: viola o grounding desse modo.
 - Framework RAG: rejeitado inicialmente; poucas funções explícitas são mais auditáveis e testáveis.
 
 ## Decision 10: Criação por intenção estruturada
 
-**Decision**: Solicitar ao `llama3:latest`, como completion e sem tools, JSON com
+**Decision original**: Solicitar ao `llama3:latest`, como completion e sem tools, JSON com
 `intent=answer|create_note`, `title` e `content`, usando a restrição de formato do runtime Ollama. O
 backend valida a estrutura, deriva o dono da sessão e persiste por meio do mesmo serviço de CRUD. Uma
 saída inválida permite no máximo uma tentativa de reparo pelo mesmo modelo; nova falha, campos ausentes
 ou intenção mista produzem pergunta de esclarecimento sem escrita.
+
+**Revisão de 2026-08-19**: A estrutura passa a distinguir
+`rag|general_chat|create_note|clarification`. Campos de título e conteúdo e o fluxo de persistência de
+`create_note` permanecem inalterados. `clarification` cobre ambiguidade real e múltiplas intenções e não
+autoriza resposta substantiva nem escrita.
 
 **Rationale**: Separa interpretação probabilística da autorização determinística sem depender de tool
 calling não declarado pelo modelo. O modelo nunca recebe capacidade de SQL nem escolhe `user_id`.
@@ -225,7 +231,8 @@ cancelamento e contrato incremental sem requisito de latência percebida.
 
 **Decision**: pytest para unidades/integração/contrato/segurança; PostgreSQL/pgvector real nas integrações;
 Ollama falso determinístico na suíte padrão e testes reais marcados; Playwright para E2E. Matriz
-anônimo/dono/outro usuário cobre cada operação. Dataset em português mede os SC-004 a SC-008.
+anônimo/dono/outro usuário cobre cada operação. Dataset em português mede os SC-004 a SC-008 e o
+conjunto conversacional adicional mede SC-012 e as decisões de clarification de 2026-08-19.
 
 **Rationale**: Testes determinísticos protegem regras; avaliação separada reconhece variabilidade e
 custo do modelo. Nenhuma funcionalidade termina com critérios relevantes falhando.
@@ -257,3 +264,39 @@ Compose documenta dependências e permite reproduzir o fluxo principal.
 **Sources**: [Docker Compose startup order](https://docs.docker.com/compose/how-tos/startup-order/),
 [Compose volumes](https://docs.docker.com/reference/compose-file/volumes/),
 [Ollama Docker](https://docs.ollama.com/docker)
+
+## Decision 14: Roteamento conversacional de três modos (revisão pós-implementação)
+
+**Historical decision**: A primeira implementação SDD tratava toda mensagem não classificada como
+`create_note` como `answer`, executava retrieval e recusava quando o corpus era insuficiente. Essa
+decisão de RAG restritivo global foi coerente com a Especificação-Base então disponível.
+
+**Superseding decision (2026-08-19)**: Para restaurar uma capacidade da aplicação de referência omitida
+da Especificação-Base, classificar e validar a intenção expressa antes de qualquer retrieval como
+`rag`, `general_chat`, `create_note` ou `clarification`. `rag` executa recuperação autorizada e nunca
+faz fallback geral; `general_chat` chama diretamente o mesmo `llama3:latest` sem contexto nem fontes;
+`clarification` solicita uma única intenção sem responder ou persistir; `create_note` preserva o fluxo
+existente. O contrato expõe o discriminador no campo `intent`, e a UI deriva dele “Resposta geral” ou
+“Baseada nas suas anotações”.
+
+**Rationale**: A ausência de resultados é evidência sobre suficiência do corpus, não sobre a intenção
+da mensagem. Usá-la como roteador confundiria “O que é Docker?” com “O que eu anotei sobre Docker?” e
+permitiria fallback silencioso indevido. Decidir o modo antes da busca mantém as fronteiras testáveis e
+preserva o grounding de consultas pessoais.
+
+**Alternatives considered**:
+
+- Decidir pelo resultado do retrieval: rejeitado porque similaridade ou ausência de notas não expressa
+  a intenção do usuário.
+- Fazer retrieval para toda pergunta e usar contexto quando disponível: rejeitado porque converteria
+  perguntas gerais em RAG apenas pela existência de nota semelhante.
+- Fazer fallback geral quando RAG não encontra contexto: rejeitado por violar FR-014.
+- Adicionar segundo classificador/LLM ou agente com tool calling: rejeitado por aumentar arquitetura e
+  alterar a variável experimental; o mesmo `llama3:latest` e a validação backend são suficientes.
+- Criar endpoint separado para conversa geral: rejeitado porque o endpoint atual já representa a
+  interface conversacional e um discriminador explícito é a menor mudança contratual.
+
+**Scope note**: Esta decisão supersedes somente o roteamento globalmente RAG restritivo. Recuperação,
+RLS, validação de fontes, criação de notas, SC-008, modelo generativo, API não-streaming e topologia de
+implantação permanecem preservados. A inconsistência manual de criação continua sendo ocorrência
+experimental separada.

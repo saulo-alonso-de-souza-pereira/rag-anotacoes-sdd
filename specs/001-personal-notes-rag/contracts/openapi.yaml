@@ -227,8 +227,9 @@ paths:
       responses:
         '200':
           description: >-
-            Grounded answer, clarification, or confirmation of a note created for the
-            current user. Sources are empty when context is insufficient.
+            RAG answer, general answer, clarification, or confirmation of a note created
+            for the current user. RAG never falls back to general knowledge when context
+            is insufficient. General answers and clarifications have empty sources.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ChatResponse' }
@@ -371,11 +372,19 @@ components:
       properties:
         intent:
           type: string
-          enum: [answer, create_note]
+          description: >-
+            Validated routing result. The UI renders general_chat as "Resposta geral"
+            and a grounded rag response as "Baseada nas suas anotações".
+          enum: [rag, general_chat, create_note, clarification]
         answer: { type: string }
-        needs_clarification: { type: boolean }
+        needs_clarification:
+          type: boolean
+          description: True only when the user must choose or complete one intent before execution.
         sources:
           type: array
+          description: >-
+            Backend-validated note sources used by rag. Must be empty for general_chat,
+            clarification and create_note; also empty for rag with insufficient context.
           items: { $ref: '#/components/schemas/Source' }
         created_note:
           oneOf:
