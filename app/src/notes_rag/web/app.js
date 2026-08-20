@@ -87,17 +87,18 @@ function renderSearch() {
 }
 
 function renderChat() {
-  byId("chat-content").innerHTML = '<form id="chat-form"><label>Pergunte às suas anotações <textarea name="message" required maxlength="4000"></textarea></label><button>Enviar</button></form><div id="chat-messages"></div>';
+  byId("chat-content").innerHTML = '<form id="chat-form"><label>Converse ou pergunte às suas anotações <textarea name="message" required maxlength="4000"></textarea></label><button>Enviar</button></form><div id="chat-messages"></div>';
   byId("chat-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const button = event.currentTarget.querySelector("button");
     const message = new FormData(event.currentTarget).get("message");
-    button.disabled = true; status("Consultando suas anotações...");
+    button.disabled = true; status("Gerando resposta...");
     try {
       const body = await api("/chat/messages", { method: "POST", body: JSON.stringify({ message }) });
       const sources = body.sources.map((source) => '<li><a href="#" data-source="' + source.note_id + '">' + escapeHtml(source.title) + '</a><p>' + escapeHtml(source.excerpt) + '</p></li>').join("");
       const created = body.created_note ? '<p><a href="#" data-source="' + body.created_note.id + '">Abrir anotação criada</a></p>' : "";
-      byId("chat-messages").innerHTML = '<article><p>' + escapeHtml(body.answer) + '</p>' + (sources ? '<h3>Fontes</h3><ul>' + sources + '</ul>' : "") + created + '</article>';
+      const mode = body.intent === "general_chat" ? '<p class="chat-mode general">Resposta geral</p>' : (body.intent === "rag" && sources ? '<p class="chat-mode grounded">Baseada nas suas anotações</p>' : "");
+      byId("chat-messages").innerHTML = '<article>' + mode + '<p>' + escapeHtml(body.answer) + '</p>' + (sources ? '<h3>Fontes</h3><ul>' + sources + '</ul>' : "") + created + '</article>';
       document.querySelectorAll("#chat-messages [data-source]").forEach((link) => link.addEventListener("click", (click) => {
         click.preventDefault(); state.editing = link.dataset.source; show("notes"); renderNotes();
       }));

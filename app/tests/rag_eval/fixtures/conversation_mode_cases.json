@@ -1,0 +1,10 @@
+{
+  "cases": [
+    {"id": "general", "message": "O que é Docker?", "intent": "general_chat"},
+    {"id": "general_related_note", "message": "O que é Docker?", "intent": "general_chat", "related_note": true},
+    {"id": "rag", "message": "O que eu anotei sobre Docker?", "intent": "rag"},
+    {"id": "rag_insufficient", "message": "Segundo minhas notas, o que é Docker?", "intent": "rag", "insufficient": true},
+    {"id": "ambiguous", "message": "Docker nas minhas notas ou em geral?", "intent": "clarification"},
+    {"id": "multiple", "message": "Crie uma nota e explique Docker", "intent": "clarification"}
+  ]
+}

@@ -2,8 +2,8 @@
   "cases": [
     {"id": "clear", "message": "Crie uma nota chamada Mercado com o conteúdo comprar café", "intent": "create_note", "creates": true},
     {"id": "incomplete", "message": "Anote isso", "intent": "create_note", "clarification": true},
-    {"id": "question", "message": "O que anotei sobre mercado?", "intent": "answer", "creates": false},
-    {"id": "mixed", "message": "O que anotei e também crie uma nota", "intent": "create_note", "clarification": true},
+    {"id": "question", "message": "O que anotei sobre mercado?", "intent": "rag", "creates": false},
+    {"id": "mixed", "message": "O que anotei e também crie uma nota", "intent": "clarification", "clarification": true},
     {"id": "malformed", "model_output": "{invalid", "repair_limit": 1, "fail_closed": true}
   ]
 }

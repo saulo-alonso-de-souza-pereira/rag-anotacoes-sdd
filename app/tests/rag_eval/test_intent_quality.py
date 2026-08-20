@@ -16,6 +16,8 @@ def test_intent_fixture_covers_accuracy_exact_once_and_fail_closed_outcomes() ->
     incomplete = IntentDecision(intent="create_note", needs_clarification=True)
     assert not incomplete.complete_creation() and by_id["incomplete"]["clarification"]
     assert by_id["question"]["creates"] is False
+    assert by_id["question"]["intent"] == "rag"
+    assert by_id["mixed"]["intent"] == "clarification"
     assert by_id["malformed"] == {
         "id": "malformed",
         "model_output": "{invalid",

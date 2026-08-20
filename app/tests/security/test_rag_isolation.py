@@ -39,3 +39,27 @@ async def test_note_instructions_are_delimited_as_data_and_no_other_context_is_a
     assert "Bob" in model.prompt
     assert len(response.sources) == 1
     assert response.sources[0].title == "Nota autorizada"
+
+
+class GeneralRouter:
+    async def classify(self, _message: str):
+        return type("Decision", (), {"intent": "general_chat", "needs_clarification": False})()
+
+
+class ForbiddenRetrieval:
+    async def search(self, _query: str):
+        raise AssertionError("general_chat_must_not_retrieve_notes")
+
+
+class GeneralModel:
+    async def complete(self, _prompt: str, **_kwargs) -> str:
+        return "Resposta geral segura."
+
+
+@pytest.mark.asyncio
+async def test_general_chat_never_reads_or_exposes_note_context() -> None:
+    response = await RagService(
+        ForbiddenRetrieval(), GeneralModel(), intent=GeneralRouter()
+    ).respond("O que é Docker?")
+    assert response.intent == "general_chat"
+    assert response.sources == ()

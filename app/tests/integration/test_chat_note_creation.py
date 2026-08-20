@@ -52,6 +52,7 @@ async def test_question_and_ambiguous_creation_write_nothing() -> None:
     store = Store()
     model = SequenceModel(
         [
+            {"intent": "rag"},
             {"intent": "create_note", "needs_clarification": True},
             {"intent": "create_note", "needs_clarification": True},
         ]

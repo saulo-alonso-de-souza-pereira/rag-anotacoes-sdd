@@ -13,6 +13,7 @@ class Retrieval:
         self.results = results
 
     async def search(self, _query: str) -> list[RetrievalResult]:
+        self.called = True
         return self.results
 
 
@@ -55,3 +56,65 @@ async def test_invented_citation_and_insufficient_context_fail_closed() -> None:
     empty = await RagService(Retrieval([]), invented).respond("Pergunta")
     assert empty.answer == INSUFFICIENT
     assert invented.prompt
+
+
+class Decision:
+    def __init__(self, intent: str, *, clarification: bool = False) -> None:
+        self.intent = intent
+        self.needs_clarification = clarification
+        self.title = None
+        self.content = None
+
+    def complete_creation(self) -> bool:
+        return False
+
+
+class Router:
+    def __init__(self, decision: Decision) -> None:
+        self.decision = decision
+
+    async def classify(self, _message: str) -> Decision:
+        return self.decision
+
+
+@pytest.mark.asyncio
+async def test_general_chat_skips_retrieval_and_returns_no_sources() -> None:
+    retrieval = Retrieval([result("Docker note")])
+    retrieval.called = False
+    model = Model({"answer": "unused"})
+    model.response = "Docker é uma plataforma de containers."
+    response = await RagService(retrieval, model, intent=Router(Decision("general_chat"))).respond(
+        "O que é Docker?"
+    )
+    assert response.intent == "general_chat"
+    assert response.sources == ()
+    assert not retrieval.called
+
+
+@pytest.mark.asyncio
+async def test_rag_without_context_never_falls_back_to_general_chat() -> None:
+    retrieval = Retrieval([])
+    retrieval.called = False
+    model = Model({"answer": "general fallback"})
+    response = await RagService(retrieval, model, intent=Router(Decision("rag"))).respond(
+        "O que eu anotei sobre Docker?"
+    )
+    assert response.intent == "rag"
+    assert response.answer == INSUFFICIENT
+    assert retrieval.called
+    assert model.prompt == ""
+
+
+@pytest.mark.asyncio
+async def test_clarification_has_no_retrieval_or_substantive_answer() -> None:
+    retrieval = Retrieval([result()])
+    retrieval.called = False
+    response = await RagService(
+        retrieval,
+        Model({"answer": "unused"}),
+        intent=Router(Decision("clarification", clarification=True)),
+    ).respond("Crie uma nota e explique Docker")
+    assert response.intent == "clarification"
+    assert response.needs_clarification
+    assert response.sources == ()
+    assert not retrieval.called

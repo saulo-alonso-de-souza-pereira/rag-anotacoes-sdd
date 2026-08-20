@@ -108,3 +108,61 @@ def test_strict_explicit_creation_fallback(message: str, title: str, content: st
 
 def test_explicit_creation_fallback_rejects_missing_fields() -> None:
     assert extract_explicit_creation("Crie uma nota sobre compras") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message", "intent"),
+    [
+        ("O que eu anotei sobre Docker?", "rag"),
+        ("Segundo minhas notas, o que é Docker?", "rag"),
+        ("O que é Docker?", "general_chat"),
+    ],
+)
+async def test_four_mode_routing_uses_expressed_intent(message: str, intent: str) -> None:
+    model = SequenceModel([json.dumps({"intent": intent})])
+    decision = await IntentService(model).classify(message)
+    assert decision.intent == intent
+    assert model.calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    ["Docker nas minhas notas ou em geral?", "Crie uma nota e explique Docker"],
+)
+async def test_ambiguity_and_multiple_intents_fail_closed(message: str) -> None:
+    model = SequenceModel([json.dumps({"intent": "clarification", "needs_clarification": True})])
+    decision = await IntentService(model).classify(message)
+    assert decision.intent == "clarification"
+    assert decision.needs_clarification
+    assert model.calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("message", "intent"),
+    [
+        ("Segundo minhas notas, o que é Docker?", "rag"),
+        ("According to my notes, what is the release date?", "rag"),
+        ("O que é Docker?", "general_chat"),
+        ("What is release management?", "general_chat"),
+    ],
+)
+async def test_explicit_message_mode_overrides_non_creation_model_uncertainty(
+    message: str, intent: str
+) -> None:
+    model = SequenceModel([json.dumps({"intent": "clarification", "needs_clarification": True})])
+    decision = await IntentService(model).classify(message)
+    assert decision.intent == intent
+    assert not decision.needs_clarification
+
+
+@pytest.mark.asyncio
+async def test_explicit_note_query_survives_malformed_model_classification() -> None:
+    model = SequenceModel(["not-json"])
+    decision = await IntentService(model).classify(
+        "According to my notes, what is the release date?"
+    )
+    assert decision.intent == "rag"
+    assert model.calls == 0

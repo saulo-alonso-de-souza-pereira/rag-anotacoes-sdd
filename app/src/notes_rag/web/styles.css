@@ -18,10 +18,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px
 .semantic { font-size: .8rem; padding: .2rem .5rem; border-radius: 1rem; background: #e2e8f0; }
 .semantic.ready { background: #dcfce7; color: #166534; }
 .semantic.failed { background: #fee2e2; color: #991b1b; }
+.chat-mode { display: inline-block; margin-bottom: .25rem; padding: .2rem .55rem; border-radius: 1rem; font-size: .85rem; font-weight: 700; }
+.chat-mode.general { background: #e0f2fe; color: #075985; }
+.chat-mode.grounded { background: #dcfce7; color: #166534; }
 #status { min-height: 1.5rem; margin-block: 1rem; font-weight: 600; }
 .skip-link { position: absolute; left: -9999px; }
 .skip-link:focus { left: 1rem; top: 1rem; z-index: 10; background: white; padding: .7rem; }
 [hidden] { display: none !important; }
 @media (max-width: 640px) { header { align-items: flex-start; flex-direction: column; } .note-list li { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }
-

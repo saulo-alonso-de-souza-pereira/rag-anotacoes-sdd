@@ -27,12 +27,16 @@ async def test_embed_and_complete_use_expected_local_models() -> None:
 
     adapter = client(httpx.MockTransport(handler))
     assert await adapter.embed(["texto"]) == [[0.1, 0.2]]
-    assert await adapter.complete("prompt", json_schema={"type": "object"}) == '{"answer":"ok"}'
+    assert (
+        await adapter.complete("prompt", json_schema={"type": "object"}, max_tokens=160)
+        == '{"answer":"ok"}'
+    )
     embed_body = json.loads(requests[0].content)
     complete_body = json.loads(requests[1].content)
     assert embed_body["model"] == "embeddinggemma:300m"
     assert complete_body["model"] == "llama3:latest"
     assert complete_body["options"]["temperature"] == 0
+    assert complete_body["options"]["num_predict"] == 160
     assert complete_body["format"] == {"type": "object"}
     await adapter.close()
 

@@ -78,7 +78,7 @@ def test_chat_clear_creation_clarification_question_and_note_discovery(page: Pag
                     route,
                     200,
                     {
-                        "intent": "answer",
+                        "intent": "rag",
                         "answer": "Não encontrei informação suficiente.",
                         "needs_clarification": False,
                         "sources": [],
@@ -91,7 +91,7 @@ def test_chat_clear_creation_clarification_question_and_note_discovery(page: Pag
     page.route("**/*", handler)
     page.goto("http://app.test/")
     page.get_by_role("button", name="Chat").click()
-    message = page.get_by_label("Pergunte às suas anotações")
+    message = page.get_by_label("Converse ou pergunte às suas anotações")
     message.fill("Crie uma nota de compras")
     page.get_by_role("button", name="Enviar").click()
     page.get_by_role("link", name="Abrir anotação criada").click()
@@ -99,10 +99,10 @@ def test_chat_clear_creation_clarification_question_and_note_discovery(page: Pag
     assert len(state["notes"]) == 1
 
     page.get_by_role("button", name="Chat").click()
-    page.get_by_label("Pergunte às suas anotações").fill("Anote isso")
+    page.get_by_label("Converse ou pergunte às suas anotações").fill("Anote isso")
     page.get_by_role("button", name="Enviar").click()
     expect(page.get_by_text("O chatbot precisa de mais informações.")).to_be_visible()
-    page.get_by_label("Pergunte às suas anotações").fill("Qual minha comida favorita?")
+    page.get_by_label("Converse ou pergunte às suas anotações").fill("Qual minha comida favorita?")
     page.get_by_role("button", name="Enviar").click()
     expect(page.get_by_text("Não encontrei informação suficiente.")).to_be_visible()
     assert len(state["notes"]) == 1

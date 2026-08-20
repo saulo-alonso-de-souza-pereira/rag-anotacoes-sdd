@@ -32,6 +32,7 @@ class OllamaPort(Protocol):
         *,
         json_schema: dict[str, Any] | None = None,
         temperature: float = 0,
+        max_tokens: int | None = None,
     ) -> str: ...
 
     async def model_identity(self, model: str) -> str: ...
@@ -79,6 +80,7 @@ class OllamaClient:
         *,
         json_schema: dict[str, Any] | None = None,
         temperature: float = 0,
+        max_tokens: int | None = None,
     ) -> str:
         request: dict[str, Any] = {
             "model": self._generation_model,
@@ -88,6 +90,8 @@ class OllamaClient:
         }
         if json_schema is not None:
             request["format"] = json_schema
+        if max_tokens is not None:
+            request["options"]["num_predict"] = max_tokens
         payload = await self._post("/api/generate", request)
         return CompletionResponse.model_validate(payload).response
 

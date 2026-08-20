@@ -13,21 +13,22 @@ def p95(values: list[float]) -> float:
 
 
 def authenticated_client(base_url: str) -> httpx.Client:
-    client = httpx.Client(base_url=base_url, timeout=70)
+    normalized_base_url = base_url.rstrip("/") + "/"
+    client = httpx.Client(base_url=normalized_base_url, timeout=70)
     username = f"perf-{uuid4().hex[:12]}"
     password = "Senha local segura 2026!"
     assert (
-        client.post("/auth/register", json={"username": username, "password": password}).status_code
+        client.post("auth/register", json={"username": username, "password": password}).status_code
         == 201
     )
     assert (
-        client.post("/auth/login", json={"username": username, "password": password}).status_code
+        client.post("auth/login", json={"username": username, "password": password}).status_code
         == 204
     )
     client.headers.update(
         {
             "X-CSRF-Token": client.cookies["notes_csrf"],
-            "Origin": base_url.removesuffix("/api/v1"),
+            "Origin": base_url.rstrip("/").removesuffix("/api/v1"),
         }
     )
     return client
@@ -52,7 +53,7 @@ def test_real_cpu_latency_targets_and_ten_active_sessions() -> None:
                 executor.map(
                     lambda pair: elapsed(
                         lambda: pair[1].post(
-                            "/notes",
+                            "notes",
                             json={
                                 "title": f"Release {pair[0]}",
                                 "content": "The software release is Friday at 2 PM.",
@@ -69,7 +70,7 @@ def test_real_cpu_latency_targets_and_ten_active_sessions() -> None:
         note_ids = [response.json()["id"] for _duration, response in created]
         while monotonic() < deadline:
             statuses = [
-                client.get(f"/notes/{note_id}").json()["semantic_status"]
+                client.get(f"notes/{note_id}").json()["semantic_status"]
                 for client, note_id in zip(clients, note_ids, strict=True)
             ]
             if all(status == "ready" for status in statuses):
@@ -82,7 +83,7 @@ def test_real_cpu_latency_targets_and_ten_active_sessions() -> None:
                 executor.map(
                     lambda client: elapsed(
                         lambda: client.post(
-                            "/search/semantic",
+                            "search/semantic",
                             json={"query": "software release Friday 2 PM"},
                         )
                     ),
@@ -95,7 +96,7 @@ def test_real_cpu_latency_targets_and_ten_active_sessions() -> None:
         warmup_deadline = monotonic() + 180
         while True:
             warmup = clients[0].post(
-                "/chat/messages",
+                "chat/messages",
                 json={"message": "What day and time is the software release?"},
             )
             if warmup.status_code == 200:
@@ -103,18 +104,21 @@ def test_real_cpu_latency_targets_and_ten_active_sessions() -> None:
             assert warmup.status_code == 503 and monotonic() < warmup_deadline
             sleep(2)
 
-        chat_durations = []
-        for client in clients:
-            duration, response = elapsed(
-                lambda current=client: current.post(
-                    "/chat/messages",
-                    json={"message": "What day and time is the software release?"},
+        for message, expected_intent in (
+            ("According to my notes, what day and time is the software release?", "rag"),
+            ("What is software release management?", "general_chat"),
+        ):
+            chat_durations = []
+            for client in clients:
+                duration, response = elapsed(
+                    lambda current=client, query=message: current.post(
+                        "chat/messages", json={"message": query}
+                    )
                 )
-            )
-            assert response.status_code == 200
-            assert response.json()["sources"]
-            chat_durations.append(duration)
-        assert sum(duration <= 60 for duration in chat_durations) / len(chat_durations) >= 0.9
+                assert response.status_code == 200
+                assert response.json()["intent"] == expected_intent
+                chat_durations.append(duration)
+            assert sum(duration <= 60 for duration in chat_durations) / len(chat_durations) >= 0.9
     finally:
         for client in clients:
             client.close()

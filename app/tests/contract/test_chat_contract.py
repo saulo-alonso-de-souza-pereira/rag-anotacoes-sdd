@@ -13,6 +13,12 @@ def test_chat_contract_covers_grounded_insufficient_and_unavailable_outcomes() -
     operation = DOCUMENT["paths"]["/chat/messages"]["post"]
     assert set(operation["responses"]) == {"200", "401", "403", "422", "503"}
     response = DOCUMENT["components"]["schemas"]["ChatResponse"]
+    assert response["properties"]["intent"]["enum"] == [
+        "rag",
+        "general_chat",
+        "create_note",
+        "clarification",
+    ]
     assert response["additionalProperties"] is False
     assert set(response["required"]) == {
         "intent",
@@ -23,3 +29,4 @@ def test_chat_contract_covers_grounded_insufficient_and_unavailable_outcomes() -
     source = DOCUMENT["components"]["schemas"]["Source"]
     assert set(source["required"]) == {"note_id", "title", "excerpt"}
     assert source["properties"]["excerpt"]["maxLength"] == 500
+    assert "empty for general_chat" in response["properties"]["sources"]["description"]

@@ -20,7 +20,7 @@ class ChatResponse:
     created_note: Note | None = None
 
     def __post_init__(self) -> None:
-        if self.intent not in {"answer", "create_note"}:
+        if self.intent not in {"rag", "general_chat", "create_note", "clarification"}:
             raise ValueError("invalid_intent")
         if not self.answer.strip():
             raise ValueError("empty_answer")
@@ -28,6 +28,8 @@ class ChatResponse:
             raise ValueError("clarification_must_not_have_side_effects")
         if self.created_note and self.intent != "create_note":
             raise ValueError("created_note_requires_create_intent")
+        if self.intent != "rag" and self.sources:
+            raise ValueError("sources_require_rag_intent")
 
 
 def verified_sources(

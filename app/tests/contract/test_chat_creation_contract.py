@@ -12,7 +12,12 @@ DOCUMENT = yaml.safe_load(
 def test_chat_response_has_creation_and_clarification_discriminators() -> None:
     schema = DOCUMENT["components"]["schemas"]["ChatResponse"]
     properties = schema["properties"]
-    assert properties["intent"]["enum"] == ["answer", "create_note"]
+    assert properties["intent"]["enum"] == [
+        "rag",
+        "general_chat",
+        "create_note",
+        "clarification",
+    ]
     assert properties["needs_clarification"]["type"] == "boolean"
     assert {item.get("$ref") for item in properties["created_note"]["oneOf"]} == {
         "#/components/schemas/Note",

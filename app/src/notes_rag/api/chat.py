@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -32,7 +32,7 @@ class SourceResponse(BaseModel):
 
 
 class ChatResponseBody(BaseModel):
-    intent: str
+    intent: Literal["rag", "general_chat", "create_note", "clarification"]
     answer: str
     needs_clarification: bool
     sources: list[SourceResponse]
