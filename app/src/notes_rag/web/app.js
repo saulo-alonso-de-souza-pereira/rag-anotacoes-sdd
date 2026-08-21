@@ -18,7 +18,7 @@ async function api(path, options = {}) {
 }
 
 function show(view) {
-  ["auth", "notes", "search", "chat"].forEach((name) => {
+  ["auth", "notes", "chat"].forEach((name) => {
     byId(name + "-view").hidden = name !== view;
   });
 }
@@ -70,22 +70,6 @@ async function renderNotes() {
   }
 }
 
-function renderSearch() {
-  byId("search-content").innerHTML = '<form id="search-form"><label>O que você procura? <input name="query" required maxlength="2000"></label><button>Buscar</button></form><div id="search-results" aria-live="polite"><p>Digite uma ideia para encontrar anotações relacionadas.</p></div>';
-  byId("search-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const query = new FormData(event.currentTarget).get("query");
-    try {
-      const body = await api("/search/semantic", { method: "POST", body: JSON.stringify({ query }) });
-      const items = body.results.map((item) => '<article class="search-result"><h3>' + escapeHtml(item.title) + '</h3><p>' + escapeHtml(item.excerpt) + '</p><a href="#" data-source="' + item.note_id + '">Abrir fonte</a></article>').join("");
-      byId("search-results").innerHTML = items || "<p>Nenhuma anotação suficientemente relacionada.</p>";
-      document.querySelectorAll("[data-source]").forEach((link) => link.addEventListener("click", (click) => {
-        click.preventDefault(); state.editing = link.dataset.source; show("notes"); renderNotes();
-      }));
-    } catch (error) { status(error.message); }
-  });
-}
-
 function renderChat() {
   byId("chat-content").innerHTML = '<form id="chat-form"><label>Converse ou pergunte às suas anotações <textarea name="message" required maxlength="4000"></textarea></label><button>Enviar</button></form><div id="chat-messages"></div>';
   byId("chat-form").addEventListener("submit", async (event) => {
@@ -120,10 +104,10 @@ async function saveNote(event) {
 }
 
 async function bootstrap() {
-  try { state.user = await api("/auth/me"); renderSearch(); renderChat(); show("notes"); await renderNotes(); }
+  try { state.user = await api("/auth/me"); renderChat(); show("notes"); await renderNotes(); }
   catch { state.user = null; show("auth"); authForm(); }
 }
 
-document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => { if (state.user) { show(button.dataset.view); if (button.dataset.view === "search") renderSearch(); if (button.dataset.view === "chat") renderChat(); } }));
+document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => { if (state.user) { show(button.dataset.view); if (button.dataset.view === "chat") renderChat(); } }));
 byId("logout").addEventListener("click", async () => { try { await api("/auth/logout", { method: "POST" }); } finally { await bootstrap(); } });
 bootstrap();

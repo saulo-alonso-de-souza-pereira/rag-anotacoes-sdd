@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 
+from notes_rag.services.intent import OLLAMA_INTENT_SCHEMA
 from notes_rag.services.rag import INSUFFICIENT, RagService
 from notes_rag.services.retrieval import RetrievalResult
 
@@ -20,8 +21,10 @@ class OllamaFake:
         self.payload = payload
         self.requests: list[str] = []
 
-    async def complete(self, prompt: str, **_kwargs) -> str:
+    async def complete(self, prompt: str, **kwargs) -> str:
         self.requests.append(prompt)
+        if kwargs.get("json_schema") is OLLAMA_INTENT_SCHEMA:
+            return json.dumps({"intent": "rag"})
         return json.dumps(self.payload)
 
 
@@ -38,7 +41,8 @@ async def test_retrieval_prompt_response_and_source_reconstruction() -> None:
     response = await RagService(Retrieval(item), model).respond("Que horas é a reunião?")
     assert response.answer == "A reunião é às 14 horas."
     assert [source.note_id for source in response.sources] == [item.note_id]
-    assert item.excerpt in model.requests[0]
+    assert "<mensagem>" in model.requests[0]
+    assert item.excerpt in model.requests[1]
 
 
 @pytest.mark.asyncio

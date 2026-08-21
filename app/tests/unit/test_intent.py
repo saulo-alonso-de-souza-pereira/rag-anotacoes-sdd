@@ -2,167 +2,143 @@ import json
 
 import pytest
 
-from notes_rag.services.intent import (
-    IntentService,
-    extract_explicit_creation,
-    looks_like_creation_request,
-)
+from notes_rag.domain.chat import ClassificationError
+from notes_rag.services.intent import OLLAMA_INTENT_SCHEMA, IntentService
 
 
-class SequenceModel:
+class SpyModel:
     def __init__(self, replies: list[str]) -> None:
         self.replies = iter(replies)
-        self.calls = 0
+        self.prompts: list[str] = []
 
-    async def complete(self, _prompt: str, **kwargs) -> str:
-        self.calls += 1
+    async def complete(self, prompt: str, **kwargs) -> str:
+        self.prompts.append(prompt)
         assert kwargs["temperature"] == 0
         assert kwargs["json_schema"]["additionalProperties"] is False
         return next(self.replies)
 
 
-def test_creation_guard_routes_only_explicit_write_requests() -> None:
-    assert looks_like_creation_request("Crie uma nota sobre o projeto")
-    assert looks_like_creation_request("Anote comprar café")
-    assert looks_like_creation_request("Save a note for tomorrow")
-    assert not looks_like_creation_request("O que anotei sobre o projeto?")
-    assert not looks_like_creation_request("Qual é o horário?")
+def encoded(intent: str, **fields: object) -> str:
+    return json.dumps({"intent": intent, **fields})
 
 
 @pytest.mark.asyncio
-async def test_strict_creation_intent_is_parsed() -> None:
-    model = SequenceModel(
-        [json.dumps({"intent": "create_note", "title": "Compra", "content": "Leite"})]
+@pytest.mark.parametrize(
+    ("message", "returned_intent"),
+    [
+        ("Segundo minhas notas, o que é Docker?", "general_chat"),
+        ("O que é Docker?", "rag"),
+        ("Crie uma nota sobre Docker", "clarification"),
+        ("Docker nas minhas notas ou em geral?", "general_chat"),
+    ],
+)
+async def test_message_shape_cannot_bypass_or_override_primary_model(
+    message: str, returned_intent: str
+) -> None:
+    fields = {"needs_clarification": True} if returned_intent == "clarification" else {}
+    model = SpyModel([encoded(returned_intent, **fields)])
+    decision = await IntentService(model).classify(message)
+    assert decision.intent == returned_intent
+    assert len(model.prompts) == 1
+    assert f"<mensagem>{message}</mensagem>" in model.prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_complete_creation_is_decided_by_primary_model() -> None:
+    model = SpyModel(
+        [encoded("create_note", title="Compra", content="Leite", needs_clarification=False)]
     )
-    decision = await IntentService(model).classify("Anote comprar leite")
+    decision = await IntentService(model).classify("Qual é a capital do Peru?")
     assert decision.complete_creation()
-    assert model.calls == 1
+    assert len(model.prompts) == 1
 
 
 @pytest.mark.asyncio
-async def test_malformed_output_gets_one_repair_then_fails_closed() -> None:
-    model = SequenceModel(["not-json", '{"intent":"tool_call","owner_id":"attacker"}'])
-    decision = await IntentService(model).classify("Crie uma nota")
-    assert decision.intent == "create_note"
-    assert decision.needs_clarification
-    assert not decision.complete_creation()
-    assert model.calls == 2
-
-
-@pytest.mark.asyncio
-async def test_missing_creation_fields_requires_clarification() -> None:
-    model = SequenceModel(
+async def test_incomplete_creation_uses_one_same_model_repair() -> None:
+    model = SpyModel(
         [
-            json.dumps({"intent": "create_note", "needs_clarification": True}),
-            json.dumps({"intent": "create_note", "needs_clarification": True}),
-        ]
-    )
-    decision = await IntentService(model).classify("Anote isso")
-    assert not decision.complete_creation()
-    assert model.calls == 2
-
-
-@pytest.mark.asyncio
-async def test_incomplete_clear_creation_uses_single_repair() -> None:
-    model = SequenceModel(
-        [
-            json.dumps({"intent": "create_note", "needs_clarification": True}),
-            json.dumps(
-                {
-                    "intent": "create_note",
-                    "title": "Mercado",
-                    "content": "Comprar café",
-                    "needs_clarification": False,
-                }
+            encoded("create_note", needs_clarification=True),
+            encoded(
+                "create_note",
+                title="Mercado",
+                content="Comprar café",
+                needs_clarification=False,
             ),
         ]
     )
-    decision = await IntentService(model).classify(
-        "Crie uma nota chamada Mercado com conteúdo Comprar café"
-    )
+    decision = await IntentService(model).classify("Crie uma nota chamada Mercado")
     assert decision.complete_creation()
-    assert model.calls == 2
-
-
-@pytest.mark.parametrize(
-    ("message", "title", "content"),
-    [
-        (
-            "Crie uma anotação com título Compras e conteúdo Comprar café e arroz.",
-            "Compras",
-            "Comprar café e arroz.",
-        ),
-        (
-            "Create a note titled Shopping with content coffee and rice.",
-            "Shopping",
-            "coffee and rice.",
-        ),
-    ],
-)
-def test_strict_explicit_creation_fallback(message: str, title: str, content: str) -> None:
-    decision = extract_explicit_creation(message)
-    assert decision is not None
-    assert decision.title == title
-    assert decision.content == content
-
-
-def test_explicit_creation_fallback_rejects_missing_fields() -> None:
-    assert extract_explicit_creation("Crie uma nota sobre compras") is None
+    assert len(model.prompts) == 2
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("message", "intent"),
+    "replies",
     [
-        ("O que eu anotei sobre Docker?", "rag"),
-        ("Segundo minhas notas, o que é Docker?", "rag"),
-        ("O que é Docker?", "general_chat"),
+        ["not-json", "still-not-json"],
+        [encoded("tool_call"), encoded("tool_call")],
+        [encoded("rag", owner_id="attacker"), encoded("rag", owner_id="attacker")],
     ],
 )
-async def test_four_mode_routing_uses_expressed_intent(message: str, intent: str) -> None:
-    model = SequenceModel([json.dumps({"intent": intent})])
-    decision = await IntentService(model).classify(message)
-    assert decision.intent == intent
-    assert model.calls == 0
+async def test_invalid_classifier_output_fails_after_one_repair(replies: list[str]) -> None:
+    model = SpyModel(replies)
+    with pytest.raises(ClassificationError, match="classifier_output_invalid"):
+        await IntentService(model).classify("O que é Docker?")
+    assert len(model.prompts) == 2
+
+
+@pytest.mark.asyncio
+async def test_valid_clarification_is_not_a_classification_failure() -> None:
+    model = SpyModel([encoded("clarification", title=None, content=None, needs_clarification=True)])
+    decision = await IntentService(model).classify("Crie uma nota e explique Docker")
+    assert decision.intent == "clarification"
+    assert decision.needs_clarification
+    assert len(model.prompts) == 1
+    assert "mais de um resultado incompativel" in model.prompts[0]
+    assert "'Crie uma nota e explique Docker' exige clarification" in model.prompts[0]
+    assert "Crie uma nota chamada Docker com conteudo Estudar Docker." in model.prompts[0]
+    assert "Crie uma nota e diga o que eu anotei sobre Docker." in model.prompts[0]
+    assert "Mensagem: Explique Docker." in model.prompts[0]
+    assert "Mensagem: O que eu anotei sobre Docker?" in model.prompts[0]
+
+
+def test_ollama_schema_uses_grammar_compatible_keywords() -> None:
+    intent = OLLAMA_INTENT_SCHEMA["properties"]["intent"]
+    assert intent["enum"] == ["rag", "general_chat", "create_note", "clarification"]
+    assert "pattern" not in intent
+    assert "default" not in json.dumps(OLLAMA_INTENT_SCHEMA)
+    assert set(OLLAMA_INTENT_SCHEMA["required"]) == {
+        "intent",
+        "title",
+        "content",
+        "needs_clarification",
+    }
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "message",
-    ["Docker nas minhas notas ou em geral?", "Crie uma nota e explique Docker"],
-)
-async def test_ambiguity_and_multiple_intents_fail_closed(message: str) -> None:
-    model = SequenceModel([json.dumps({"intent": "clarification", "needs_clarification": True})])
-    decision = await IntentService(model).classify(message)
-    assert decision.intent == "clarification"
-    assert decision.needs_clarification
-    assert model.calls == 0
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("message", "intent"),
     [
-        ("Segundo minhas notas, o que é Docker?", "rag"),
-        ("According to my notes, what is the release date?", "rag"),
-        ("O que é Docker?", "general_chat"),
-        ("What is release management?", "general_chat"),
+        "O que eu anotei sobre as decisões tomadas pelo time?",
+        "O que eu anotei sobre a reunião secreta?",
     ],
 )
-async def test_explicit_message_mode_overrides_non_creation_model_uncertainty(
-    message: str, intent: str
+async def test_note_questions_repair_invalid_fields_without_becoming_creation(
+    message: str,
 ) -> None:
-    model = SequenceModel([json.dumps({"intent": "clarification", "needs_clarification": True})])
-    decision = await IntentService(model).classify(message)
-    assert decision.intent == intent
-    assert not decision.needs_clarification
-
-
-@pytest.mark.asyncio
-async def test_explicit_note_query_survives_malformed_model_classification() -> None:
-    model = SequenceModel(["not-json"])
-    decision = await IntentService(model).classify(
-        "According to my notes, what is the release date?"
+    model = SpyModel(
+        [
+            encoded(
+                "rag",
+                title=message,
+                content="campo indevido",
+                needs_clarification=False,
+            ),
+            encoded("rag", title=None, content=None, needs_clarification=False),
+        ]
     )
+    decision = await IntentService(model).classify(message)
     assert decision.intent == "rag"
-    assert model.calls == 0
+    assert not decision.complete_creation()
+    assert len(model.prompts) == 2
+    assert message in model.prompts[1]

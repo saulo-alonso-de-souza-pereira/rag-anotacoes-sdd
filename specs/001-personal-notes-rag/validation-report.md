@@ -4,6 +4,300 @@
 **Status**: Automated acceptance passed; moderated usability study executed — SC-002 PASS and
 SC-007 FAIL
 
+## Third iteration: LLM-first routing and internal-only semantic retrieval (2026-08-20)
+
+The user explicitly waived retrospective RED/GREEN reconstruction for T143. No pre-implementation
+failure evidence was recreated or inferred. The implementation and post-implementation validation
+continued from the existing working tree.
+
+### Implemented behavior and targeted validation
+
+- `IntentService.classify` has no regex, keyword, prefix, question-shape or explicit-creation
+  extraction path. Every non-empty chat message calls the configured `llama3:latest` adapter first
+  and routing occurs only after `IntentDecision` schema validation.
+- A valid model decision of `clarification` remains a normal `ChatResponse`. Invalid JSON/schema,
+  a disallowed intent or a technical classifier failure after the one same-model repair raises
+  `ClassificationError` and maps to the actionable `502 classification_failed` error envelope.
+- `general_chat` calls the same model again without retrieval or sources; `rag` alone performs
+  owner-filtered internal retrieval and grounded generation; `create_note` and `clarification` do
+  not retrieve note context.
+- The `/api/v1/search/semantic` router/module, OpenAPI surface, static UI view/menu/form/client call
+  and its obsolete contract test were removed. Embeddings, pgvector, indexing jobs, retry-indexing
+  and `RetrievalService` remain intact as internal RAG mechanisms.
+- Targeted T120-T129 command completed with **39 passed, 1 deselected**. The deselected case was the
+  opt-in real-model CPU test; the internal retrieval performance assertion executed and passed.
+- The configured non-E2E regression completed with **120 passed, 1 skipped, 9 deselected** and
+  **86.25%** branch-aware coverage, above the required 85%.
+- Chromium E2E initially exposed three failures caused by the removed `renderSearch` function still
+  being called from UI bootstrap. Removing only that residual call fixed the issue; the rerun
+  completed with **3 passed, 2 skipped, 125 deselected**.
+- Deterministic SC-012 coverage passed in the targeted suite: all four general formulations, their
+  explicit RAG counterparts, classifier-override sentinels and valid clarification cases are
+  represented. Unit/integration spies prove classification precedes every branch.
+- `ruff format --check` reports 90 files formatted and `ruff check` reports no violations.
+
+### Real-backend validation blocked in the resumed managed environment
+
+At that earlier checkpoint, Quickstart 5.3-5.7, the opt-in real-model CPU performance run and the
+Compose acceptance run could not be repeated in the resumed managed environment. `docker compose ps` was denied access to both
+the user Docker configuration and the Docker Engine named pipe. With the repository-local uv cache,
+`scripts/check.ps1` completed frozen dependency checking, formatting and lint, then stopped at
+`uv run --frozen alembic heads` because the Python 3.13 executable under the user profile was denied.
+Without the local cache it stopped earlier at the global uv cache. These are environment-access
+failures, not application test failures.
+
+The user separately confirmed outside this managed environment that Docker was operational, the
+application started, health returned 200 and the then-current targeted suite returned 33 passed.
+That external confirmation is recorded as user-provided context, not as an execution performed by
+this report. At that checkpoint, Quickstart T139 and the complete scripted/opt-in portions of T140
+remained objectively blocked until the working tree could be run in that external environment.
+
+### Traceability and Constitution Check
+
+| Scope | Third-iteration tasks/evidence |
+|---|---|
+| US3, FR-009/010/013/014 | T123, T126, T132, T134, T137-T142; internal indexing/retrieval and grounded-source tests |
+| US6, FR-019/022/023 | T120-T133, T138-T141; LLM-first ordering, branch isolation, error and E2E tests |
+| SC-004 | T129, T138-T140; internal retrieval test passed, real CPU/Compose rerun blocked |
+| SC-012 | T120-T128, T138-T141; deterministic acceptance cases and E2E passed |
+| SC-008 | Pre-existing creation tests and requirement unchanged; known creation inconsistency not fixed |
+
+Constitution Check: specification/plan/task traceability, security isolation, fail-closed errors,
+typed boundaries, test coverage and static quality gates pass. Final approval remains blocked only
+for the real-backend Quickstart, real CPU performance, Compose acceptance and the exact complete
+`scripts/check.ps1` run that the managed environment could not access. No commit or push was made.
+
+## Third-iteration Quickstart defect investigation (2026-08-20)
+
+Manual Docker evidence supplied by the user showed that two explicit note questions returned
+`classification_failed`, and that a note named `Reunião secreta` existed with the question copied as
+content. Docker CLI log access was denied in the managed environment, but the running backend and
+Ollama were initially reachable over HTTP. `llama3:latest` resolved to the required digest prefix
+`365c0bd3c000`.
+
+Replaying the classifier request isolated the root cause before code changes: the Pydantic-generated
+schema sent in Ollama's `format` field could not be converted to a grammar by Ollama 0.30.6. The raw
+HTTP response was status 400 with `Failed to initialize samplers: failed to parse grammar`; therefore
+there was no model-generated response body for that failed request. The repair call used the same
+incompatible schema and could not recover from the grammar initialization failure.
+
+A minimal equivalent schema using an `enum`, required fields and simple nullable types was accepted.
+With the corrected schema and strengthened classifier prompt, the raw model response for
+`O que eu anotei sobre as decisões tomadas pelo time?` was:
+
+```json
+{"needs_clarification":false,"title":null,"content":null,"intent":"rag"}
+```
+
+The old prompt with the compatible schema also selected `rag` for both reported questions, but
+incorrectly populated `title` and `content`. Cross-field Pydantic validation now rejects those fields
+for every non-creation intent and invokes the one allowed same-model repair with both the original
+message and prior output. The Ollama-facing schema intentionally excludes unsupported grammar
+keywords while `IntentDecision` remains the authoritative strict validator. No regex, keyword,
+prefix, question-shape fallback or public semantic-search endpoint was introduced.
+
+The `Reunião secreta` record can only be persisted through a complete `create_note` decision in the
+chat path or through the normal Notes API/UI. Historical web logs and database timing were not
+accessible, so its exact origin cannot be proven. A prior model misclassification is consistent with
+the observed title/content but remains an inference, not a confirmed fact.
+
+Post-fix static validation passed: Ruff formatting, Ruff lint, Python compileall and `git diff
+--check`. The directed pytest run could not start because access to the external Python 3.13
+executable was denied. After the direct model probes, both the Ollama `/api/ps` endpoint and the app
+health endpoint timed out, while Docker Engine access remained denied; consequently the rebuilt
+real-Docker flow and full regression could not be executed in this managed environment. At that
+checkpoint, T139 and T140 remained unchecked.
+
+## Final pending-validation attempt (2026-08-20)
+
+### T139 — executed, acceptance result FAIL
+
+The running backend was reachable at `http://localhost:18080`; `GET /api/v1/health/live` returned
+HTTP 200 with `{"status":"ok"}`. A new isolated validation user was registered and authenticated.
+Two notes were created through the Notes API and both reached `semantic_status=ready`:
+`Reunião do projeto`, containing the Docker/team-decision fact, and `Minha lista de Compras`.
+
+- `O que eu anotei sobre as decisões tomadas pelo time?` returned HTTP 200 and `intent=rag`, proving
+  that the primary classifier selected the RAG branch. Internal retrieval did not clear the fixed
+  0.55 threshold, so the response was the documented insufficiency response with `sources=[]`.
+  This is the previously diagnosed retrieval limitation; no threshold, embedding or architecture
+  setting was changed.
+- `Qual é a capital do Peru?` returned HTTP 200, `intent=general_chat`, a substantive general answer,
+  `sources=[]` and `created_note=null`, confirming isolation of the general branch from retrieval and
+  note creation.
+- `POST /api/v1/search/semantic` returned HTTP 404, confirming that public semantic search remains
+  absent while note indexing reached `ready` for internal RAG use.
+- `Crie uma nota e explique Docker` returned HTTP 200 with `intent=create_note` and persisted exactly
+  one note named `Explicação sobre Docker`. This violates the Quickstart 5.6 multiple-intent criterion,
+  which requires `intent=clarification` and no write. The record is retained as real validation
+  evidence; no classifier or creation correction was made in this validation-only step.
+- Deterministic unit/contract/integration evidence from the current revision still distinguishes a
+  valid `clarification` response from `502 classification_failed` after the single same-model repair,
+  and verifies classifier-first ordering. The live request above nevertheless proves that branch
+  isolation is not accepted for every real-model multiple-intent formulation.
+
+T139 is checked because the validation task was executed and its evidence recorded, but its product
+acceptance result is **FAIL**. SC-012 and the Quickstart branch-isolation criterion therefore cannot
+be declared fully satisfied by this run. The known creation inconsistency remains visible and was
+not corrected; the SC-008 requirement and all pre-existing SC-008 assertions remain unchanged.
+
+#### Focused multiple-intent correction
+
+The subsequent correction changed only the instructions supplied to the primary classifier and its
+single same-model repair: the model must first identify every requested outcome and give
+`clarification` precedence when creation is combined with another incompatible outcome. No message
+inspection, heuristic or routing override was added outside the model. A direct, non-persistent
+probe of `llama3:latest` using the revised production prompt and the unchanged grammar-compatible
+schema classified `Crie uma nota e explique Docker` as:
+
+```json
+{"intent":"clarification","title":null,"content":null,"needs_clarification":true}
+```
+
+The focused integration matrix covers that case with no retrieval, generation or write; an
+unambiguous creation with exactly one write; unambiguous RAG and general chat with no write; and a
+genuinely ambiguous request with no write. Execution of those pytest cases remained blocked by the
+managed environment's denial of the Python 3.13 executable. T139 remains checked as an executed
+validation task; its original failed observation is retained above rather than rewritten. SC-008,
+the 0.55 retrieval threshold and the below-threshold experimental observations remain unchanged.
+
+Post-correction validation results: the direct live-model probe passed; Ruff format reported **94
+files left unchanged**; Ruff lint passed; Python syntax compilation of the three focused files
+passed; and `git diff --check` passed with only the repository's existing LF/CRLF notices. The
+directed pytest command was attempted but could not start because the managed account was denied
+access to the Python 3.13 executable referenced by `.venv`. The complete `scripts/check.ps1` was
+also retried: frozen dependency verification and both Ruff gates passed, then it stopped at
+`uv run --frozen alembic heads` with the same permission denial and uv exit code 103. T140 therefore
+remains unchecked.
+
+#### LLM-first test-double alignment after the complete-gate failures
+
+The externally executed complete gate reported **5 failed, 123 passed, 1 skipped, 9 deselected**
+with **86.35% coverage**. The three RAG integration/evaluation failures used doubles that recognized
+classification by searching for the obsolete literal `Classifique`; with the current prompt they
+returned the generation payload to `IntentService` instead of a valid `rag` decision. The doubles
+now identify the classifier call by the exact `OLLAMA_INTENT_SCHEMA` object and return a valid
+`rag` decision before the generation payload. The two unit failures replaced the same literal-string
+assertion with observable contract checks: the intent schema is used first, general chat orders
+`classify -> generate` without retrieval, and RAG orders `classify -> retrieve -> generate` with a
+different structured schema for generation. No production behavior changed.
+
+The prescribed five-test command was attempted first in this managed environment but could not
+start collection because `.venv` references the denied external Python 3.13 executable. Ruff
+formatted one focused test file and then passed lint for all three; syntax compilation and
+`git diff --check` passed. The complete `scripts/check.ps1` retry passed frozen dependency checking
+and both Ruff gates, then stopped at `uv run --frozen alembic heads` with the same access denial and
+uv exit code 103. Therefore no new final coverage measurement is available here, the latest observed
+coverage remains the user-provided **86.35%**, and T140 remains unchecked pending an integral
+successful execution.
+
+### T140 — blocked before regression execution
+
+The exact `scripts/check.ps1` gate was attempted with a repository-local uv cache and a process-local
+PowerShell execution-policy bypass. Frozen dependency verification passed; Ruff reported **94 files
+already formatted** and **all checks passed**. The script then stopped at `uv run --frozen alembic
+heads` because the managed account was denied access to
+`C:\Users\User\AppData\Local\Programs\Python\Python313\python.exe` (uv exit code 103).
+
+Consequently the script did not reach its pytest, Chromium, opt-in performance, Compose or offline
+stages in this final attempt. T140 remains unchecked. The latest successfully completed regression
+evidence for this working tree remains **120 passed, 1 skipped, 9 deselected, 86.25% branch-aware
+coverage**, plus **3 passed, 2 skipped, 125 deselected** in Chromium E2E. Those earlier results are
+not relabeled as a successful final `scripts/check.ps1` run.
+
+### Final Constitution Check
+
+**BLOCKED / product acceptance violation, with no constitutional exception introduced.** The code
+structure, owner isolation, fail-closed technical-error path, typed boundaries, internal-only RAG,
+coverage above 85%, static quality and traceability evidence remain conformant. Final acceptance is
+not PASS because the real-model multiple-intent request created a note instead of asking for
+clarification, and because the complete regression/performance/offline gate could not execute under
+the managed Python permission restriction. No functional code, model, threshold, architecture,
+Specification or Plan change was made during this validation attempt; no commit or push was made.
+
+## Final external validation and closure (2026-08-20)
+
+The complete `scripts/check.ps1` gate was subsequently executed successfully outside the managed
+environment against the final working tree. These results were supplied by the user after the local
+permission blocks recorded above:
+
+- frozen dependencies: **PASS**;
+- Ruff format: **PASS**;
+- Ruff lint: **PASS**;
+- Alembic: **003 (head)**;
+- main suite: **128 passed, 1 skipped, 9 deselected**;
+- branch-aware coverage: **86.35%**, satisfying the constitutional minimum of 85%;
+- Chromium E2E: **3 passed, 2 skipped, 133 deselected**;
+- failures: **0**.
+
+T140 is complete. With T139 already executed and the multiple-intent defect subsequently corrected,
+all **143 of 143 tasks** are complete. The earlier failed and environment-blocked observations remain
+in this report as chronological evidence and are superseded for final-gate status by this successful
+execution.
+
+### Final Constitution Check — PASS
+
+**PASS; no blocking violation and no constitutional exception.** The final implementation preserves
+mandatory LLM-first classification through `llama3:latest`; no regex, keyword, prefix, heuristic or
+routing bypass decides intent. Multiple incompatible intentions are classified by the model as
+`clarification`, with no retrieval, general generation or note write. Public semantic search remains
+removed from API and UI, while embeddings, indexing and owner-scoped semantic retrieval remain
+internal RAG mechanisms. `embeddinggemma:300m`, the 0.55 threshold, chunking and RAG architecture are
+unchanged. SC-008 and its pre-existing assertions are unchanged. The complete automated gate has
+zero failures and 86.35% coverage, above the required 85%, so quality, testability, security,
+traceability and simplicity gates pass.
+
+The remaining non-blocking experimental limitation is preserved without correction: with
+`embeddinggemma:300m` and the fixed 0.55 minimum similarity, some valid RAG queries rank below the
+threshold and return the documented insufficiency response. This does not reintroduce public search
+and does not alter the final Constitution Check result.
+
+## Residual real-flow multiple-intent correction (2026-08-21)
+
+A subsequent manual run supplied by the user showed that the real application still classified
+`Crie uma nota e explique Docker.` as a complete `create_note` decision and persisted a note with
+title `Docker` and content `Explique Docker.`. That result demonstrates that the previous single
+contrast example was not sufficiently robust in the exercised stack.
+
+Before editing, the managed environment could not reach the application at
+`http://localhost:18080` and remained denied access to the Docker Engine, so the exact running web
+image and its Ollama service could not be inspected. A direct probe using the current production
+prompt/schema against the separately exposed local `llama3:latest` returned this raw classifier
+payload even before the change:
+
+```json
+{
+  "intent": "clarification",
+  "title": null,
+  "content": null,
+  "needs_clarification": true
+}
+```
+
+Because this differs from the supplied real-application observation, prompt/model-image divergence
+between the accessible Ollama instance and the running application remains a material diagnostic
+possibility; the exact raw pre-change payload from the unavailable application instance could not be
+recovered here. No deterministic intent rule was inferred from that divergence.
+
+The focused change only expands the primary LLM prompt into five symmetric few-shot demonstrations:
+simple creation, creation plus general question, creation plus note consultation, general question,
+and note consultation. The schema, validator, one-repair fail-closed flow and router are unchanged.
+No regex, keyword, prefix, heuristic or pre/post-LLM bypass was added. Against the accessible
+`llama3:latest`, the revised prompt returned the raw payload:
+
+```json
+{"intent":"clarification","title":null,"content":null,"needs_clarification":true}
+```
+
+Ruff format and lint passed and `git diff --check` passed with only existing LF/CRLF notices. The
+directed pytest command could not start because access to the Python 3.13 executable referenced by
+`.venv` was denied. The `scripts/check.ps1` retry passed frozen dependency verification and both Ruff
+gates, then stopped at `uv run --frozen alembic heads` with the same permission denial (uv exit code
+103). The mandatory post-change real HTTP checks for multiple intent, simple creation, general chat
+and RAG could not run because the application endpoint was unavailable. The previously completed
+T139 and T140 checkboxes remain historical completion records, but the final tree now requires an
+external rebuilt-stack rerun before this residual correction can be declared accepted end to end.
+
 ## Environment
 
 - Windows 11 Pro 10.0.26200, Docker Engine 29.5.3.

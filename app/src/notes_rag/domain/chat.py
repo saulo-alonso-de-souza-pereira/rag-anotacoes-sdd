@@ -4,6 +4,10 @@ from uuid import UUID
 from notes_rag.domain.notes import Note
 
 
+class ClassificationError(Exception):
+    """The primary classifier failed after the single allowed repair attempt."""
+
+
 @dataclass(frozen=True, slots=True)
 class Source:
     note_id: UUID

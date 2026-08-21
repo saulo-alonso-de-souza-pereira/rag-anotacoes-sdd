@@ -37,8 +37,14 @@ def test_public_mutations_require_csrf_header() -> None:
         ("/notes", "post"),
         ("/notes/{noteId}", "patch"),
         ("/notes/{noteId}", "delete"),
-        ("/search/semantic", "post"),
         ("/chat/messages", "post"),
     ):
         parameters = document["paths"][path][operation].get("parameters", [])
         assert {"$ref": "#/components/parameters/CsrfToken"} in parameters
+
+
+def test_semantic_retrieval_is_not_a_public_api() -> None:
+    document = yaml.safe_load(CONTRACT.read_text(encoding="utf-8"))
+    assert "/search/semantic" not in document["paths"]
+    assert "Search" not in {tag["name"] for tag in document.get("tags", [])}
+    assert "502" in document["paths"]["/chat/messages"]["post"]["responses"]

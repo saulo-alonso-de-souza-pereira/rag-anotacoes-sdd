@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from notes_rag.domain.chat import ChatResponse, Source, verified_sources
 from notes_rag.llm.ollama import OllamaPort
-from notes_rag.services.intent import IntentDecision, IntentService
+from notes_rag.services.intent import IntentService
 from notes_rag.services.notes import NoteService
 from notes_rag.services.retrieval import RetrievalService
 
@@ -68,15 +68,11 @@ class RagService:
     ) -> None:
         self.retrieval = retrieval
         self.ollama = ollama
-        self.intent = intent
+        self.intent = intent or IntentService(ollama)
         self.notes = notes
 
     async def respond(self, message: str) -> ChatResponse:
-        decision = (
-            await self.intent.classify(message)
-            if self.intent is not None
-            else IntentDecision(intent="rag")
-        )
+        decision = await self.intent.classify(message)
         if decision.intent == "clarification":
             return ChatResponse("clarification", CLARIFICATION, True)
         if decision.intent == "create_note":

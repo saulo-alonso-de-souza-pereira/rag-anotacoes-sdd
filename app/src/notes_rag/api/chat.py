@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from notes_rag.api.auth import mutation_session
 from notes_rag.api.errors import ApiError
 from notes_rag.api.notes import NoteResponse
-from notes_rag.domain.chat import ChatResponse, Source
+from notes_rag.domain.chat import ChatResponse, ClassificationError, Source
 from notes_rag.domain.users import Session
 from notes_rag.llm.ollama import ModelUnavailableError
 from notes_rag.services.rag import RagService
@@ -66,5 +66,11 @@ async def send_message(
 ) -> ChatResponseBody:
     try:
         return ChatResponseBody.from_domain(await service.respond(payload.message))
+    except ClassificationError as error:
+        raise ApiError(
+            502,
+            "classification_failed",
+            "Nao foi possivel classificar a mensagem. Tente reformula-la.",
+        ) from error
     except ModelUnavailableError as error:
         raise ApiError(503, "model_unavailable", "O modelo local está indisponível.") from error

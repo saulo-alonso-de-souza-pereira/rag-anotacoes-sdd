@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 
+from notes_rag.services.intent import OLLAMA_INTENT_SCHEMA
 from notes_rag.services.rag import INSUFFICIENT, RagService
 from notes_rag.services.retrieval import RetrievalResult
 
@@ -24,7 +25,9 @@ class Model:
     def __init__(self, payload: dict) -> None:
         self.payload = payload
 
-    async def complete(self, _prompt: str, **_kwargs) -> str:
+    async def complete(self, _prompt: str, **kwargs) -> str:
+        if kwargs.get("json_schema") is OLLAMA_INTENT_SCHEMA:
+            return json.dumps({"intent": "rag"})
         return json.dumps(self.payload)
 
 

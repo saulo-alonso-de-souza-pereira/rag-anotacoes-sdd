@@ -10,7 +10,6 @@ from notes_rag.api.auth import router as auth_router
 from notes_rag.api.chat import router as chat_router
 from notes_rag.api.errors import install_error_handlers
 from notes_rag.api.notes import router as notes_router
-from notes_rag.api.search import router as search_router
 from notes_rag.config import Settings, get_settings
 from notes_rag.llm.ollama import OllamaClient
 from notes_rag.persistence.database import create_runtime_engine, create_session_factory
@@ -80,7 +79,6 @@ def create_app(
     router = APIRouter(prefix="/api/v1")
     router.include_router(auth_router)
     router.include_router(notes_router)
-    router.include_router(search_router)
     router.include_router(chat_router)
 
     @router.get("/health/live", include_in_schema=False)

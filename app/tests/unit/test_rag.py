@@ -4,16 +4,20 @@ from uuid import uuid4
 import pytest
 
 from notes_rag.domain.chat import Source, verified_sources
+from notes_rag.services.intent import OLLAMA_INTENT_SCHEMA, IntentService
 from notes_rag.services.rag import INSUFFICIENT, RagService, build_prompt
 from notes_rag.services.retrieval import RetrievalResult
 
 
 class Retrieval:
-    def __init__(self, results: list[RetrievalResult]) -> None:
+    def __init__(self, results: list[RetrievalResult], events: list[str] | None = None) -> None:
         self.results = results
+        self.events = events
 
     async def search(self, _query: str) -> list[RetrievalResult]:
         self.called = True
+        if self.events is not None:
+            self.events.append("retrieve")
         return self.results
 
 
@@ -50,10 +54,14 @@ def test_citation_validation_rejects_unknown_ids_and_deduplicates() -> None:
 async def test_invented_citation_and_insufficient_context_fail_closed() -> None:
     item = result()
     invented = Model({"answer": "Inventada", "citation_ids": [str(uuid4())], "insufficient": False})
-    response = await RagService(Retrieval([item]), invented).respond("Pergunta")
+    response = await RagService(
+        Retrieval([item]), invented, intent=Router(Decision("rag"))
+    ).respond("Pergunta")
     assert response.answer == INSUFFICIENT
     assert response.sources == ()
-    empty = await RagService(Retrieval([]), invented).respond("Pergunta")
+    empty = await RagService(Retrieval([]), invented, intent=Router(Decision("rag"))).respond(
+        "Pergunta"
+    )
     assert empty.answer == INSUFFICIENT
     assert invented.prompt
 
@@ -118,3 +126,63 @@ async def test_clarification_has_no_retrieval_or_substantive_answer() -> None:
     assert response.needs_clarification
     assert response.sources == ()
     assert not retrieval.called
+
+
+class SequenceModel:
+    def __init__(self, replies: list[object], events: list[str] | None = None) -> None:
+        self.replies = iter(replies)
+        self.prompts: list[str] = []
+        self.calls: list[dict] = []
+        self.events = events
+
+    async def complete(self, prompt: str, **kwargs) -> str:
+        self.prompts.append(prompt)
+        self.calls.append(kwargs)
+        if self.events is not None:
+            self.events.append(
+                "classify" if kwargs.get("json_schema") is OLLAMA_INTENT_SCHEMA else "generate"
+            )
+        reply = next(self.replies)
+        return reply if isinstance(reply, str) else json.dumps(reply)
+
+
+@pytest.mark.asyncio
+async def test_general_chat_classifies_then_calls_same_model_without_retrieval() -> None:
+    events: list[str] = []
+    retrieval = Retrieval([result()], events)
+    retrieval.called = False
+    model = SequenceModel([{"intent": "general_chat"}, "Resposta geral"], events)
+    response = await RagService(retrieval, model, intent=IntentService(model)).respond("Pergunta")
+    assert response.intent == "general_chat" and response.sources == ()
+    assert len(model.prompts) == 2
+    assert model.calls[0]["json_schema"] is OLLAMA_INTENT_SCHEMA
+    assert "<mensagem>Pergunta</mensagem>" in model.prompts[0]
+    assert "<PERGUNTA>" in model.prompts[1]
+    assert "json_schema" not in model.calls[1]
+    assert events == ["classify", "generate"]
+    assert not retrieval.called
+
+
+@pytest.mark.asyncio
+async def test_rag_classifies_then_retrieves_and_generates_grounded_answer() -> None:
+    item = result()
+    events: list[str] = []
+    retrieval = Retrieval([item], events)
+    retrieval.called = False
+    model = SequenceModel(
+        [
+            {"intent": "rag"},
+            {"answer": "Fato", "citation_ids": [str(item.note_id)], "insufficient": False},
+        ],
+        events,
+    )
+    response = await RagService(retrieval, model, intent=IntentService(model)).respond("Pergunta")
+    assert response.intent == "rag" and len(response.sources) == 1
+    assert len(model.prompts) == 2
+    assert model.calls[0]["json_schema"] is OLLAMA_INTENT_SCHEMA
+    assert "<mensagem>Pergunta</mensagem>" in model.prompts[0]
+    assert "<CONTEXTO>" in model.prompts[1]
+    assert "json_schema" in model.calls[1]
+    assert model.calls[1]["json_schema"] is not OLLAMA_INTENT_SCHEMA
+    assert events == ["classify", "retrieve", "generate"]
+    assert retrieval.called

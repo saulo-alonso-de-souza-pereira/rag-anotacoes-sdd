@@ -115,16 +115,10 @@ def main_flow(url: str) -> tuple[str, str, str]:
                 break
             sleep(0.5)
         assert current["semantic_status"] == "ready" and current["version"] == 2
-        search = client.post(
-            "/search/semantic",
-            headers=headers,
-            json={"query": "software release Friday 2 PM"},
-        )
-        assert search.status_code == 200 and search.json()["results"]
         chat = client.post(
             "/chat/messages",
             headers=headers,
-            json={"message": "What day and time is the software release?"},
+            json={"message": "According to my notes, what day and time is the software release?"},
         )
         assert chat.status_code == 200 and chat.json()["sources"]
 
@@ -184,12 +178,12 @@ def main_flow(url: str) -> tuple[str, str, str]:
             )
             assert client.delete(f"/notes/{trap['id']}", headers=headers).status_code == 404
             isolated = client.post(
-                "/search/semantic",
+                "/chat/messages",
                 headers=headers,
-                json={"query": "software release Friday 2 PM"},
+                json={"message": "According to my notes, what day and time is the release?"},
             )
             assert isolated.status_code == 200
-            assert trap["id"] not in {item["note_id"] for item in isolated.json()["results"]}
+            assert trap["id"] not in {item["note_id"] for item in isolated.json()["sources"]}
 
         assert client.post("/auth/logout", headers=headers).status_code == 204
         assert client.get("/auth/me").status_code == 401

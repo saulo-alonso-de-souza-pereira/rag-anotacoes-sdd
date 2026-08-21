@@ -8,6 +8,12 @@ import pytest
 from playwright.sync_api import Page, Route, expect
 
 WEB = Path(__file__).resolve().parents[2] / "src/notes_rag/web"
+GENERAL_MESSAGES = (
+    "O que é Docker?",
+    "Qual é a capital do Peru?",
+    "Onde fica Machu Picchu?",
+    "Por que o céu é azul?",
+)
 
 
 @pytest.mark.e2e
@@ -46,7 +52,7 @@ def test_general_and_grounded_indicators_sources_and_clarification(page: Page) -
         elif path == "/api/v1/chat/messages":
             message = route.request.post_data_json["message"]
             requests.append(message)
-            if message == "O que é Docker?":
+            if message in GENERAL_MESSAGES:
                 respond(
                     route,
                     {
@@ -102,10 +108,11 @@ def test_general_and_grounded_indicators_sources_and_clarification(page: Page) -
     page.get_by_role("button", name="Chat").click()
     message = page.get_by_label("Converse ou pergunte às suas anotações")
 
-    message.fill("O que é Docker?")
-    page.get_by_role("button", name="Enviar").click()
-    expect(page.get_by_text("Resposta geral")).to_be_visible()
-    expect(page.get_by_role("heading", name="Fontes")).to_have_count(0)
+    for general_message in GENERAL_MESSAGES:
+        message.fill(general_message)
+        page.get_by_role("button", name="Enviar").click()
+        expect(page.get_by_text("Resposta geral")).to_be_visible()
+        expect(page.get_by_role("heading", name="Fontes")).to_have_count(0)
 
     message.fill("O que eu anotei sobre Docker?")
     page.get_by_role("button", name="Enviar").click()
@@ -124,7 +131,7 @@ def test_general_and_grounded_indicators_sources_and_clarification(page: Page) -
     expect(page.get_by_text("Escolha uma única intenção.")).to_be_visible()
     expect(page.get_by_text("O chatbot precisa de mais informações.")).to_be_visible()
     assert requests == [
-        "O que é Docker?",
+        *GENERAL_MESSAGES,
         "O que eu anotei sobre Docker?",
         "Segundo minhas notas, o que é Kubernetes?",
         "Crie uma nota e explique Docker",

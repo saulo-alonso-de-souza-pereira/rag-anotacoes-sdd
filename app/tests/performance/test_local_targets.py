@@ -1,3 +1,4 @@
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from statistics import quantiles
@@ -6,6 +7,10 @@ from uuid import uuid4
 
 import httpx
 import pytest
+
+from notes_rag.services.intent import IntentService
+from notes_rag.services.rag import RagService
+from notes_rag.services.retrieval import RetrievalResult
 
 
 def p95(values: list[float]) -> float:
@@ -38,6 +43,47 @@ def elapsed(operation) -> tuple[float, httpx.Response]:
     started = monotonic()
     response = operation()
     return monotonic() - started, response
+
+
+class TimedInternalRetrieval:
+    def __init__(self) -> None:
+        self.durations: list[float] = []
+        self.item = RetrievalResult(uuid4(), "Release", "Friday at 2 PM", 0.95)
+
+    async def search(self, _query: str):
+        started = monotonic()
+        result = [self.item]
+        self.durations.append(monotonic() - started)
+        return result
+
+
+class RagModel:
+    def __init__(self, note_id) -> None:
+        self.note_id = note_id
+        self.classify_next = True
+
+    async def complete(self, _prompt: str, **_kwargs) -> str:
+        if self.classify_next:
+            self.classify_next = False
+            return json.dumps({"intent": "rag"})
+        self.classify_next = True
+        return json.dumps(
+            {"answer": "Friday at 2 PM", "citation_ids": [str(self.note_id)], "insufficient": False}
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.performance
+async def test_retrieval_is_measured_internally_only_after_validated_rag_classification() -> None:
+    retrieval = TimedInternalRetrieval()
+    model = RagModel(retrieval.item.note_id)
+    service = RagService(retrieval, model, intent=IntentService(model))
+    responses = [
+        await service.respond("According to my notes, when is release?") for _ in range(20)
+    ]
+    assert all(response.intent == "rag" and response.sources for response in responses)
+    assert len(retrieval.durations) == 20
+    assert p95(retrieval.durations) < 2
 
 
 @pytest.mark.performance
@@ -77,21 +123,6 @@ def test_real_cpu_latency_targets_and_ten_active_sessions() -> None:
                 break
             sleep(0.5)
         assert all(status == "ready" for status in statuses)
-
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            searched = list(
-                executor.map(
-                    lambda client: elapsed(
-                        lambda: client.post(
-                            "search/semantic",
-                            json={"query": "software release Friday 2 PM"},
-                        )
-                    ),
-                    clients,
-                )
-            )
-        assert all(response.status_code == 200 for _duration, response in searched)
-        assert p95([duration for duration, _response in searched]) < 2
 
         warmup_deadline = monotonic() + 180
         while True:
